@@ -1,0 +1,148 @@
+{
+  "date": "2026-11-08",
+  "sourceRevision": "6e686d12ad450e5856ca36c827601e08107d5d05",
+  "environment": {
+    "macOS": "27.0.1 (26A434)",
+    "Xcode": "27.0 (27A266a)",
+    "Swift": "6.4 (Swift 5 language mode)",
+    "hostArchitecture": "arm64",
+    "physicalMemoryGiB": 16,
+    "deploymentTarget": "14.0"
+  },
+  "builds": {
+    "swiftPackage": "passed",
+    "xcodeDebugArm64": "passed",
+    "xcodeReleaseUniversal": "passed",
+    "releaseArchitectures": [
+      "arm64",
+      "x86_64"
+    ]
+  },
+  "coreTests": {
+    "executed": 7,
+    "failures": 0
+  },
+  "servicesSmoke": "passed: timer, unconnected music, custom adapter registry, hotkey register/conflict/retry/persistence, live system samples",
+  "runtimeValidation": {
+    "checks": {
+      "all widget kinds created": true,
+      "compact island releases demand": true,
+      "dock resolves real applications": true,
+      "hidden widgets release demand": true,
+      "invalid suite import preserves settings": true,
+      "island window expanded": true,
+      "notes updated": true,
+      "safe calculator evaluates": true,
+      "settings window presented": true,
+      "suite JSON restores actual settings and widgets": true,
+      "timer completed": true
+    },
+    "passed": true,
+    "windowCount": 6
+  },
+  "idleReleaseMeasurement": {
+    "conditions": "Island compact, settings closed, no Dock/widgets, disconnected music, global shortcut disabled",
+    "sampling": "20 ps samples at 1-second intervals after 2-second startup delay; RSS is not physical footprint",
+    "elapsedSeconds": 22.52,
+    "samples": [
+      {
+        "cpu": 0.0,
+        "rssKB": 87200.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87200.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87200.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87200.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.1,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86864.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86768.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86768.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86768.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86768.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 86768.0
+      }
+    ],
+    "cpuMean": 0.005,
+    "cpuMax": 0.1,
+    "rssMiBMean": 84.8703125,
+    "rssMiBMax": 85.15625
+  },
+  "initialTimeProfiler": {
+    "seconds": 10,
+    "exportedProfileRows": 12,
+    "capture": "succeeded; local raw trace not versioned",
+    "scope": "earlier initial Release build"
+  },
+  "notVerified": [
+    "Calendar permission and real events",
+    "Music and Spotify permission and playback",
+    "manual hover, drag/drop, resize, VoiceOver and Reduce Motion",
+    "physical multiple displays and fullscreen Spaces",
+    "macOS 14/15 and Intel runtime",
+    "FPS, prolonged allocations and leak analysis"
+  ]
+}
