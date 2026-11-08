@@ -8,7 +8,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets"], default="all")
+parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets", "dock-motion", "widget-motion"], default="all")
 selection = parser.parse_args().only
 architecture = platform.machine()
 if architecture not in {"arm64", "x86_64"}:
@@ -31,13 +31,17 @@ with tempfile.TemporaryDirectory(prefix="betterapple-native-check-") as temporar
     link = ["-parse-as-library", "-I", directory, "-L", directory, "-lBetterAppleCore",
             "-Xlinker", "-rpath", "-Xlinker", directory]
     services = sorted((root / "Sources/BetterApple/Services").glob("*.swift"))
+    shared = sorted((root / "Sources/BetterApple/Shared").rglob("*.swift"))
+    modules = sorted(path for path in (root / "Sources/BetterApple/Features/DynamicIsland").rglob("*.swift") if path.name not in {"IslandManager.swift", "IslandView.swift"})
     checks = {
         "services": (services, "service-smoke.swift"),
         "productivity": (services, "productivity-smoke.swift"),
-        "dock": (sorted((root / "Sources/BetterApple/Features/Dock").glob("*.swift")), "dock-smoke.swift"),
-        "widgets": (services + [root / "Sources/BetterApple/Features/DynamicIsland/IslandModules.swift"] +
+        "dock": (shared + sorted((root / "Sources/BetterApple/Features/Dock").glob("*.swift")), "dock-smoke.swift"),
+        "widgets": (services + shared + modules +
                     sorted((root / "Sources/BetterApple/Features/Widgets").glob("*.swift")), "widget-smoke.swift"),
     }
+    checks["dock-motion"] = (checks["dock"][0], "dock-motion-smoke.swift")
+    checks["widget-motion"] = (checks["widgets"][0], "widget-motion-smoke.swift")
     for name, (sources, script) in checks.items():
         if selection not in {"all", name}:
             continue
