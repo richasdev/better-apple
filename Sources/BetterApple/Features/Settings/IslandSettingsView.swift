@@ -17,7 +17,20 @@ struct IslandSettingsView: View {
                 Picker("Placement", selection: $model.settings.island.placementMode) {
                     ForEach(IslandPlacement.allCases) { Text($0.title).tag($0) }
                 }
-                Text(cameraMode ? "Blends into the MacBook camera, centered at the top. Move the pointer to the small black edge below the camera to expand. On displays without a notch, a slim handle sits just below the menu bar." : "A separate floating surface below the menu bar, with adjustable offsets.")
+                Text(cameraMode ? "Aligned with the physical MacBook camera cutout. A 4 pt black edge remains below it for hover; expanded controls open underneath. On a display without a notch, an 80 × 8 pt handle sits below the menu bar." : "A separate floating surface below the menu bar, with adjustable offsets.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Displays") {
+                Picker("Show Island on", selection: $model.settings.island.allDisplays) {
+                    Text(cameraMode ? "Camera display (automatic)" : "Primary display").tag(false)
+                    Text("Every connected display").tag(true)
+                }
+                Text(model.settings.island.allDisplays
+                     ? "Each display gets an Island. Expansion and the selected module are shared; displays without a camera cutout use the slim handle."
+                     : (cameraMode ? "Uses the first display with a camera cutout, even when an external monitor is primary. If none has a cutout, uses the primary display." : "Uses the primary display configured in macOS."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Allow over full-screen apps", isOn: $model.settings.island.showInFullScreen)
+                Text("Full-screen participation is off by default. Spaces and full-screen behavior depend on macOS window management.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Live appearance") {
@@ -39,20 +52,22 @@ struct IslandSettingsView: View {
                     }
                     Spacer()
                 }.padding(.vertical, 12).accessibilityLabel("Island appearance preview")
-                Picker("Theme", selection: $model.settings.island.visual.theme) {
-                    ForEach(SurfaceTheme.allCases) { Text($0.title).tag($0) }
-                }.disabled(cameraMode)
-                Picker("Material", selection: $model.settings.island.visual.material) {
-                    ForEach(SurfaceMaterial.allCases) { Text($0.title).tag($0) }
-                }.disabled(cameraMode)
+                if !cameraMode {
+                    Picker("Theme", selection: $model.settings.island.visual.theme) {
+                        ForEach(SurfaceTheme.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Material", selection: $model.settings.island.visual.material) {
+                        ForEach(SurfaceMaterial.allCases) { Text($0.title).tag($0) }
+                    }
+                }
                 Picker("Accent", selection: $model.settings.island.visual.accent) {
                     ForEach(WorkspaceAccent.allCases) { Label($0.title, systemImage: "circle.fill").foregroundStyle($0.color).tag($0) }
                 }
-                slider("Surface opacity", value: $model.settings.island.visual.opacity, range: 0.5...1, format: .percent)
-                    .disabled(cameraMode)
+                if !cameraMode {
+                    slider("Surface opacity", value: $model.settings.island.visual.opacity, range: 0.5...1, format: .percent)
+                    Toggle("Border", isOn: $model.settings.island.visual.borderVisible)
+                }
                 slider("Corner radius", value: $model.settings.island.visual.cornerRadius, range: 0...40)
-                Toggle("Border", isOn: $model.settings.island.visual.borderVisible)
-                    .disabled(cameraMode)
                 Toggle("Shadow", isOn: $model.settings.island.visual.shadowVisible)
                 Toggle("Module names below icons", isOn: $model.settings.island.visual.showModuleLabels)
                 if cameraMode { Text("Camera mode uses an opaque black surface to match the physical cutout. Your floating theme is kept for switching back.").font(.caption).foregroundStyle(.secondary) }
@@ -60,30 +75,34 @@ struct IslandSettingsView: View {
             Section("Behavior") {
                 Toggle("Enable Dynamic Island", isOn: $model.settings.island.enabled)
                 Toggle("Expand on hover", isOn: $model.settings.island.hoverToExpand)
-                Toggle("Minimal appearance", isOn: $model.settings.island.minimal)
-                    .disabled(cameraMode)
-                Toggle("Live compact status", isOn: $model.settings.island.visual.compactStatus)
-                    .disabled(cameraMode)
-                Text("Live compact status shows the selected module’s available data and keeps only that service active while the Island is visible. Turn it off for the lowest idle activity.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("Show on every display", isOn: $model.settings.island.allDisplays)
-                Toggle("Allow over full-screen apps", isOn: $model.settings.island.showInFullScreen)
+                if !cameraMode {
+                    Toggle("Minimal appearance", isOn: $model.settings.island.minimal)
+                    Toggle("Live compact status", isOn: $model.settings.island.visual.compactStatus)
+                    Text("Live compact status keeps the selected service active while visible. Turn it off for the lowest idle activity.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("The hidden camera edge does not request module data. Music, calendar and system data update when expanded and visible.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 slider("Close delay · 0 keeps open", value: $model.settings.island.autoCloseDelay, range: 0...10, format: .seconds)
                 slider("Animation duration", value: $model.settings.island.visual.animationDuration, range: 0...0.8, format: .seconds)
                 Text("Pin the expanded Island to keep it open. Escape closes it. Reduce Motion and Reduce Transparency follow macOS Accessibility settings.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Geometry") {
-                slider("Compact width", value: $model.settings.island.width, range: 140...500)
-                    .disabled(cameraMode)
-                slider("Compact height", value: $model.settings.island.height, range: 24...64)
-                    .disabled(cameraMode)
+                if !cameraMode {
+                    slider("Compact width", value: $model.settings.island.width, range: 140...500)
+                    slider("Compact height", value: $model.settings.island.height, range: 24...64)
+                }
                 slider("Expanded width", value: $model.settings.island.expandedWidth, range: 340...650)
                 slider("Expanded height", value: $model.settings.island.expandedHeight, range: 240...600)
-                slider("Horizontal offset", value: $model.settings.island.offsetX, range: -500...500)
-                    .disabled(cameraMode)
-                slider("Distance below menu bar", value: $model.settings.island.offsetY, range: 0...200)
-                    .disabled(cameraMode)
+                if !cameraMode {
+                    slider("Horizontal offset", value: $model.settings.island.offsetX, range: -500...500)
+                    slider("Distance below menu bar", value: $model.settings.island.offsetY, range: 0...200)
+                } else {
+                    Text("Compact size and position follow the measured camera cutout automatically. Switch to Floating to adjust them manually.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section("Enabled modules") {
                 ForEach(ModuleID.allCases) { module in

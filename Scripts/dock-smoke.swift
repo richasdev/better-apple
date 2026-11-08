@@ -24,6 +24,18 @@ struct DockSmoke {
         let manager = DockManager(defaults: defaults)
         let initialPaths = manager.preferences.applicationPaths
         assert(!manager.applications.isEmpty)
+        assert(!manager.preferences.enabled)
+        manager.preferences.applicationPaths = []
+        assert(manager.applications.isEmpty)
+        manager.preferences.applicationPaths = initialPaths
+        assert(Set(manager.applications.map(\.id)) == Set(initialPaths))
+        let disabledPreferences = manager.preferences
+        let persistedBeforeSettings = defaults.data(forKey: "dock.preferences")
+        manager.prepareSettings()
+        assert(manager.preferences == disabledPreferences)
+        assert(defaults.data(forKey: "dock.preferences") == persistedBeforeSettings)
+        assert(!manager.applications.isEmpty && manager.applications.allSatisfy { !$0.name.isEmpty && $0.icon.size.width > 0 })
+        assert(NSApp.windows.filter { $0 is NSPanel && $0.isVisible }.isEmpty)
         manager.preferences.cornerRadius = 31
         manager.preferences.theme = .dark
         manager.preferences.material = .solid
@@ -51,6 +63,6 @@ struct DockSmoke {
         assert(restored.preferences.iconSize == 36 && restored.preferences.spacing == 6 && restored.preferences.applicationPaths == initialPaths && restored.preferences.autoHide)
         restored.applyPreset(.default)
         assert(restored.preferences.iconSize == 48 && restored.preferences.opacity == 0.9 && restored.preferences.material == .glass && restored.preferences.magnification == 1.16)
-        print("PASS: legacy Dock JSON; validation bounds; native panels; per-screen hover; all-display panel count; running apps; hide cleanup; persisted appearance; deterministic presets.")
+        print("PASS: legacy Dock JSON; validation bounds; disabled settings metadata stays current without windows or preference changes; native panels; per-screen hover; all-display panel count; running apps; hide cleanup; persisted appearance; deterministic presets.")
     }
 }

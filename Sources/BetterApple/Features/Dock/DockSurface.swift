@@ -197,8 +197,12 @@ struct DockSettingsView: View {
     @ObservedObject var manager: DockManager
     var body: some View {
         Form {
-            Section("Independent Dock") {
+            Section("BetterApple Dock") {
                 Toggle("Enable BetterApple Dock", isOn: $manager.preferences.enabled)
+                Text("This is an independent Dock alongside the macOS Dock. You can customize it while it is turned off; your setup is kept.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Placement") {
                 Picker("Position", selection: $manager.preferences.position) { ForEach(DockPosition.allCases) { Text($0.rawValue.capitalized).tag($0) } }
                 Toggle("Show on every display", isOn: $manager.preferences.allDisplays)
                 if !manager.preferences.allDisplays {
@@ -207,7 +211,14 @@ struct DockSettingsView: View {
                         ForEach(NSScreen.screens, id: \.self) { screen in Text(screen.localizedName).tag(DockManager.screenID(screen)) }
                     }
                 }
+                if manager.preferences.allDisplays {
+                    Text("Every display uses the same position, appearance and pinned applications.").font(.caption).foregroundStyle(.secondary)
+                }
+                Button("Open macOS Dock settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!) }
+            }
+            Section("Behavior") {
                 Toggle("Automatically hide", isOn: $manager.preferences.autoHide)
+                Text("Move the pointer to the thin edge strip to reveal the Dock. It stays open while you interact with it.").font(.caption).foregroundStyle(.secondary)
                 Toggle("Show running applications", isOn: $manager.preferences.showRunningApplications)
                 Text("Running apps appear after pinned apps. Use their context menu to keep them in the Dock.").font(.caption).foregroundStyle(.secondary)
             }
@@ -217,13 +228,13 @@ struct DockSettingsView: View {
                 Picker("Accent color", selection: $manager.preferences.accent) { ForEach(DockAccent.allCases) { Text($0.rawValue.capitalized).tag($0) } }
                 slider("Icon size", value: $manager.preferences.iconSize, range: 24...80, step: 2)
                 slider("Spacing", value: $manager.preferences.spacing, range: 0...24, step: 1)
-                slider("Opacity", value: $manager.preferences.opacity, range: 0.2...1, step: 0.05)
+                slider("Opacity", value: $manager.preferences.opacity, range: 0.2...1, step: 0.05, unit: "%")
                 slider("Corner radius", value: $manager.preferences.cornerRadius, range: 0...40, step: 1)
                 Toggle("Show app labels", isOn: $manager.preferences.showLabels)
             }
             Section("Motion") {
-                slider("Magnification", value: $manager.preferences.magnification, range: 1...1.5, step: 0.02)
-                slider("Animation duration", value: $manager.preferences.animationDuration, range: 0...0.5, step: 0.02)
+                slider("Magnification", value: $manager.preferences.magnification, range: 1...1.5, step: 0.02, unit: "×")
+                slider("Animation duration", value: $manager.preferences.animationDuration, range: 0...0.5, step: 0.02, unit: "s")
                 Text("Set magnification to 1× to disable it. Reduce Motion disables magnification and animated window resizing.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Pinned applications") {
@@ -231,17 +242,17 @@ struct DockSettingsView: View {
                     HStack { Image(nsImage: app.icon).resizable().frame(width: 24, height: 24); Text(app.name); Spacer(); Button("Remove") { manager.remove(id: app.id) } }
                 }
                 Button("Add applications…") { manager.chooseApplications() }
-                Text("Drag pinned icons onto another pinned icon to reorder. The macOS Dock remains independent.").font(.caption).foregroundStyle(.secondary)
-                Button("Open macOS Dock settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!) }
+                Text("When the BetterApple Dock is on, drag a pinned icon onto another to reorder. Missing applications are not shown in this list.").font(.caption).foregroundStyle(.secondary)
                 if let error = manager.errorMessage { Text(error).font(.caption).foregroundStyle(.orange) }
             }
-        }.formStyle(.grouped)
+        }.formStyle(.grouped).onAppear { manager.prepareSettings() }
     }
-    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double) -> some View {
-        LabeledContent(title) {
+    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, unit: String = "pt") -> some View {
+        let displayValue = unit == "%" ? value.wrappedValue.formatted(.percent.precision(.fractionLength(0))) : value.wrappedValue.formatted(.number.precision(.fractionLength(0...2))) + " " + unit
+        return LabeledContent(title) {
             HStack {
-                Text(value.wrappedValue.formatted(.number.precision(.fractionLength(0...2)))).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 42)
-                Slider(value: value, in: range, step: step).frame(width: 150).accessibilityLabel(title)
+                Text(displayValue).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 62, alignment: .trailing)
+                Slider(value: value, in: range, step: step).frame(width: 150).accessibilityLabel(title).accessibilityValue(displayValue)
             }
         }
     }

@@ -18,7 +18,18 @@ struct DockApplication: Identifiable {
 
 @MainActor
 final class DockManager: ObservableObject {
-    @Published var preferences: DockPreferences { didSet { if preferences != oldValue { save(); refresh() } } }
+    @Published var preferences: DockPreferences {
+        didSet {
+            guard preferences != oldValue else { return }
+            save()
+            // Settings can edit pinned apps while the feature is disabled. Keep
+            // that metadata current without allocating a Dock window or polling.
+            if !preferences.enabled && (preferences.applicationPaths != oldValue.applicationPaths || preferences.showRunningApplications != oldValue.showRunningApplications) {
+                reloadApplications()
+            }
+            refresh()
+        }
+    }
     @Published private(set) var applications: [DockApplication] = []
     @Published private(set) var hoveringScreens: Set<String> = []
     @Published private(set) var errorMessage: String?
@@ -79,6 +90,8 @@ final class DockManager: ObservableObject {
 
     func show() { preferences.enabled = true }
     func hide() { preferences.enabled = false }
+    /// One event-driven refresh for Settings, independent of feature visibility.
+    func prepareSettings() { reloadApplications() }
     func applyPreset(_ preset: AppearancePreset) {
         guard preset != .custom else { return }
         var next = preferences

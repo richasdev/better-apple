@@ -50,6 +50,8 @@ enum FeatureToggleValidation {
                             }])
         }
         app.widgets.editing = false
+        // Isolate this fixture from panels still retiring in earlier suite cases.
+        app.widgets.enabled = false
         var note = WidgetConfiguration(kind: .notes)
         note.note = "Feature toggles preserve this local note"
         note.title = "Toggle validation"

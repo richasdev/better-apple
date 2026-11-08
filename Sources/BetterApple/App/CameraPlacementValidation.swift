@@ -81,6 +81,26 @@ enum CameraPlacementValidation {
             "bodyCompact": NSStringFromRect(compact.bodyFrame), "bodyExpanded": NSStringFromRect(expanded.bodyFrame),
             "cap": compact.capFrame.map(NSStringFromRect) ?? "none", "hardwareCameraAccessRequested": false]
         try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("camera-placement.json"))
+        app.model.settings.island.allDisplays = true
+        app.island.applySettings()
+        try await Task.sleep(for: .milliseconds(160))
+        let displayBodies = NSApp.windows.compactMap { $0 as? IslandPanel }.filter(\.isVisible)
+        checks["every-display Island creates one body on each connected screen"] = displayBodies.count == NSScreen.screens.count && NSScreen.screens.allSatisfy { screen in
+            let metrics = CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
+                safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea)
+            let frame = CameraIslandGeometry.layout(screen: metrics, expanded: false,
+                expandedWidth: app.model.settings.island.expandedWidth, expandedHeight: app.model.settings.island.expandedHeight).bodyFrame
+            return displayBodies.contains { matches($0.frame, frame) }
+        }
+        if let first = displayBodies.first {
+            app.island.handlePointer(true, panel: first)
+            try await Task.sleep(for: .milliseconds(260))
+            checks["every-display Island shares expansion across connected screens"] = app.island.state.expanded && displayBodies.allSatisfy { $0.frame.height > 8 }
+            app.island.handlePointer(false, panel: first)
+        }
+        app.island.collapse()
+        app.model.settings.island.allDisplays = false
+        app.island.applySettings()
         return checks
     }
     private static func matches(_ a: CGRect, _ b: CGRect) -> Bool {
