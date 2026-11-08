@@ -95,6 +95,8 @@ enum InteractionValidation {
         try await Task.sleep(for: .milliseconds(350))
         checks["rapid reversal and preference edit settle exact compact geometry"] = !app.island.state.expanded && !app.island.state.expandedContentVisible && app.island.state.compactContentVisible && abs(panel.frame.width - 322) < 1 && abs(panel.frame.height - app.model.settings.island.height) < 1 && !panel.isKeyWindow
         samples.append(["event": "rapid_reverse_settled", "width": panel.frame.width, "height": panel.frame.height,
+                        "frame": NSStringFromRect(panel.frame), "minimum": NSStringFromSize(panel.minSize),
+                        "expectedHeight": app.model.settings.island.height, "placement": app.model.settings.island.placementMode.rawValue,
                         "expanded": app.island.state.expanded, "compactVisible": app.island.state.compactContentVisible])
         app.model.settings.island.visual.animationDuration = 0
         app.island.applySettings(); app.island.toggle()

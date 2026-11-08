@@ -115,7 +115,12 @@ final class IslandManager {
                 toggle: { [weak self] in self?.toggle() }, open: { [weak self] in self?.open() }, close: { [weak self] in self?.collapse() },
                 select: { [weak self] in self?.selectModule($0) }, keyboardActive: { [weak panel] in panel?.isKeyboardTarget == true }))
             hosting.sizingOptions = []
-            panel.contentView = hosting
+            // AppKit owns panel geometry. A plain container prevents SwiftUI's
+            // animated root-window sizing from competing with interrupted resizes.
+            let container = NSView(frame: .zero)
+            hosting.autoresizingMask = [.width, .height]
+            container.addSubview(hosting)
+            panel.contentView = container
             var cap: CameraCapPanel?
             if settings.placementMode == .camera, let frame = cameraLayout(for: screen).capFrame {
                 let trigger = CameraCapPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
