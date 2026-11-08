@@ -19,7 +19,9 @@ enum RuntimeValidation {
             app.island.state.selected = .calculator
             app.island.state.expanded = true
             try await Task.sleep(for: .milliseconds(500))
-            checks["island expanded"] = app.island.activeModule == .calculator
+            checks["island window expanded"] = app.island.state.expanded && NSApp.windows.contains {
+                $0 is IslandPanel && $0.isVisible && $0.frame.width >= 419 && $0.frame.height >= 249
+            }
             captureWindows(to: directory, prefix: "island")
             app.dock.show()
             checks["dock resolves real applications"] = !app.dock.applications.isEmpty
