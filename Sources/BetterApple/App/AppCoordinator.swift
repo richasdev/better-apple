@@ -125,40 +125,49 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "BetterApple.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let shortcut = ShortcutConfiguration(enabled: shortcuts.enabled, key: shortcuts.key.rawValue, modifiers: shortcuts.modifiers.rawValue)
-            try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut)).write(to: url, options: .atomic)
+            try configurationData().write(to: url, options: .atomic)
         } catch { model.persistenceError = error.localizedDescription }
+    }
+    func configurationData() throws -> Data {
+        guard widgets.widgets.allSatisfy({ $0.note.count <= 100000 }) else { throw SettingsError.tooLarge }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let shortcut = ShortcutConfiguration(enabled: shortcuts.enabled, key: shortcuts.key.rawValue, modifiers: shortcuts.modifiers.rawValue)
+        let data = try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut))
+        guard data.count <= 2 * 1024 * 1024 else { throw SettingsError.tooLarge }
+        return data
     }
     func importConfiguration() {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let data = try Data(contentsOf: url)
-            guard data.count <= 2 * 1024 * 1024 else { throw SettingsError.tooLarge }
-            let suite = try JSONDecoder().decode(SuiteConfiguration.self, from: data)
-            guard suite.version == 1 else { throw SettingsError.unsupportedVersion(suite.version) }
-            let settings = try suite.app.validated()
-            if let shortcut = suite.shortcut {
-                guard GlobalShortcutService.Key(rawValue: shortcut.key) != nil,
-                      GlobalShortcutService.Modifiers(rawValue: shortcut.modifiers) != nil else { throw CocoaError(.coderInvalidValue) }
-            }
-            guard suite.widgets.count <= 30, suite.dock.applicationPaths.count <= 100,
-                  suite.dock.iconSize.isFinite, suite.dock.spacing.isFinite, suite.dock.opacity.isFinite,
-                  (24...80).contains(suite.dock.iconSize), (0...24).contains(suite.dock.spacing), (0.2...1).contains(suite.dock.opacity),
-                  suite.dock.applicationPaths.allSatisfy({ $0.hasPrefix("/") && $0.hasSuffix(".app") }),
-                  Set(suite.widgets.map(\.id)).count == suite.widgets.count,
-                  suite.widgets.allSatisfy({ $0.x.isFinite && $0.y.isFinite && (220...800).contains($0.width) && (160...800).contains($0.height) && (0.2...1).contains($0.opacity) && $0.note.count <= 100000 }) else {
-                throw CocoaError(.coderInvalidValue)
-            }
-            model.settings = settings; dock.preferences = suite.dock; widgets.widgets = suite.widgets
-            if let shortcut = suite.shortcut {
-                shortcuts.enabled = false
-                shortcuts.key = GlobalShortcutService.Key(rawValue: shortcut.key)!
-                shortcuts.modifiers = GlobalShortcutService.Modifiers(rawValue: shortcut.modifiers)!
-                shortcuts.enabled = shortcut.enabled
-            }
+            if let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 2 * 1024 * 1024 { throw SettingsError.tooLarge }
+            try applyConfigurationData(Data(contentsOf: url))
         } catch { model.persistenceError = error.localizedDescription }
+    }
+    func applyConfigurationData(_ data: Data) throws {
+        guard data.count <= 2 * 1024 * 1024 else { throw SettingsError.tooLarge }
+        let suite = try JSONDecoder().decode(SuiteConfiguration.self, from: data)
+        guard suite.version == 1 else { throw SettingsError.unsupportedVersion(suite.version) }
+        let settings = try suite.app.validated()
+        if let shortcut = suite.shortcut {
+            guard GlobalShortcutService.Key(rawValue: shortcut.key) != nil,
+                  GlobalShortcutService.Modifiers(rawValue: shortcut.modifiers) != nil else { throw CocoaError(.coderInvalidValue) }
+        }
+        guard suite.widgets.count <= 30, suite.dock.applicationPaths.count <= 100,
+              suite.dock.iconSize.isFinite, suite.dock.spacing.isFinite, suite.dock.opacity.isFinite,
+              (24...80).contains(suite.dock.iconSize), (0...24).contains(suite.dock.spacing), (0.2...1).contains(suite.dock.opacity),
+              suite.dock.applicationPaths.allSatisfy({ $0.hasPrefix("/") && $0.hasSuffix(".app") }),
+              Set(suite.widgets.map(\.id)).count == suite.widgets.count,
+              suite.widgets.allSatisfy({ $0.x.isFinite && $0.y.isFinite && (220...800).contains($0.width) && (160...800).contains($0.height) && (0.2...1).contains($0.opacity) && $0.note.count <= 100000 }) else {
+            throw CocoaError(.coderInvalidValue)
+        }
+        model.settings = settings; dock.preferences = suite.dock; widgets.widgets = suite.widgets
+        if let shortcut = suite.shortcut {
+            shortcuts.enabled = false
+            shortcuts.key = GlobalShortcutService.Key(rawValue: shortcut.key)!
+            shortcuts.modifiers = GlobalShortcutService.Modifiers(rawValue: shortcut.modifiers)!
+            shortcuts.enabled = shortcut.enabled
+        }
     }
     func applyPreset(_ preset: AppearancePreset) {
         model.settings.applyPreset(preset)

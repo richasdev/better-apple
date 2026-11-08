@@ -31,6 +31,18 @@ enum RuntimeValidation {
             app.widgets.update(notes.id) { $0.note = "Runtime validation — persisted locally" }
             app.widgets.flushPersistence()
             checks["notes updated"] = app.widgets.widgets.first { $0.id == notes.id }?.note == "Runtime validation — persisted locally"
+            let exported = try app.configurationData()
+            app.model.settings.island.width = 321
+            try app.applyConfigurationData(exported)
+            checks["suite JSON restores actual settings and widgets"] = app.model.settings.island.width == 220 && app.widgets.widgets.count == 10 && app.widgets.widgets.first { $0.id == notes.id }?.note == "Runtime validation — persisted locally"
+            var invalid = try JSONSerialization.jsonObject(with: exported) as! [String: Any]
+            invalid["version"] = 999
+            do {
+                try app.applyConfigurationData(JSONSerialization.data(withJSONObject: invalid))
+                checks["invalid suite import preserves settings"] = false
+            } catch {
+                checks["invalid suite import preserves settings"] = app.model.settings.island.width == 220 && app.widgets.widgets.count == 10
+            }
             captureWindows(to: directory, prefix: "widgets")
             app.timer.start(seconds: 1)
             try await Task.sleep(for: .milliseconds(1300))

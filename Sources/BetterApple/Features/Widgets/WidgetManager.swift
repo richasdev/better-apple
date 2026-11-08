@@ -152,6 +152,7 @@ final class WidgetManager: ObservableObject {
             panels[id]?.orderOut(nil)
             panels[id]?.contentView = nil
             panels[id]?.delegate = nil
+            panels[id]?.close()
             panels.removeValue(forKey: id); delegates.removeValue(forKey: id)
         }
         for item in widgets where visibleIDs.contains(item.id) {

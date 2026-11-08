@@ -72,7 +72,7 @@ final class DockManager: ObservableObject {
     func hide() { preferences.enabled = false }
     func refresh() {
         guard preferences.enabled else {
-            hideWork?.cancel(); panel?.orderOut(nil); panel?.contentView = nil; panel = nil
+            hideWork?.cancel(); panel?.orderOut(nil); panel?.contentView = nil; panel?.close(); panel = nil
             return
         }
         reloadApplications()
