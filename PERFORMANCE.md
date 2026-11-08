@@ -67,3 +67,7 @@ O modo `--validate --profile-motion` existe apenas em Debug, usa preferências i
 ## Alteração 0.4 — câmera
 
 Nenhuma nova medição de CPU, RAM ou FPS foi realizada nesta etapa. O estado compacto Camera não mantém demanda dos módulos, mesmo se a preferência antiga de status compacto estiver ligada. O cap usa hover/clique por eventos e não adiciona polling, display link ou animação contínua. Testes de geometria/estado não demonstram cumprimento das metas de performance. Evidência funcional em [Validation/2026-11-09-camera.json](Validation/2026-11-09-camera.json).
+
+## Seleção de recursos e conteúdo de widgets — 0.4.1
+
+Desligar Widgets desmonta também painéis em fade e elimina activeKinds; desligar Island/Dock fecha suas janelas. O prazo de um timer iniciado é preservado. Não há polling extra para os switches. A validação detectou e corrigiu a montagem ausente do conteúdo SwiftUI em novos widgets; medições históricas com painéis vazios não demonstram o consumo de widgets funcionais. Profiling com conteúdo real permanece pendente, sem novas afirmações de RAM/CPU/FPS. Relatório: [Validation/2026-11-09-features.json](Validation/2026-11-09-features.json).

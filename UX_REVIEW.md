@@ -55,3 +55,19 @@ Evidência: 25 testes do núcleo passaram. Builds Debug arm64 e Release universa
 Geometria real observada: tela 1512 × 982 pt; corpo compacto 193 × 4 pt, topo em 949 pt; expandido 440 × 340 pt no mesmo topo; cap de 185 × 37 pt. Não houve acesso à câmera. [Relatório desta etapa](Validation/2026-11-09-camera.json).
 
 Limites: geometria e estado de NSWindow não certificam composição física do notch, mouse/trackpad, Spaces, fullscreen ou 60 FPS. Nenhuma nova medição de CPU/RAM foi feita. Acesso externo à UI continua indisponível neste ambiente.
+
+## Seleção independente de recursos — 0.4.1
+
+Problema: General tinha controles para Island/Dock, mas o controle de Widgets era somente edição de layout. Não existia uma escolha persistente de desligar o recurso inteiro, independente de repouso e visibilidade de cada widget.
+
+Alteração: três switches nativos em General, cada um com descrição e acesso à configuração; os mesmos recursos têm marcas no menu bar. Desligar preserva notas/layout/aplicativos e desmonta as janelas, incluindo widgets em fade. Edição fica indisponível com Widgets desligado. Não há animação contínua nem nova permissão; navegação e controles usam a linguagem nativa existente.
+
+Julgamento: o teste de conteúdo montado revelou um bug anterior: NSPanel já cria uma NSView vazia, logo a verificação contentView == nil não instalava o hosting de novos widgets. A criação agora instala NSHostingView explicitamente. O teste verifica a hierarquia real, além do estado persistido.
+
+A regressão de reversão rápida da Island voltou a falhar e uma tentativa de substituir o alvo do animator com duração zero causou um ciclo de constraints; essa tentativa foi removida. A evidência nativa apontou resize animado do próprio NSHostingView competindo com a geometria AppKit. O hosting da Island agora vive num NSView com autoresizing, deixando a janela sob controle do AppKit. Duas execuções completas consecutivas passaram após a correção, incluindo a dimensão compacta de 34 pt, abertura do editor e geometria Camera.
+
+Evidência desta etapa: 25 testes do núcleo sem falhas e 62 verificações internas em duas execuções consecutivas. Cobertura nova: três recursos independentes, janelas reais, notas/posições/visibilidade individual, importação/exportação, escolha persistida, retomada de repouso sem reativação e desligamento durante fade/reversões. Não se declara validação física dos switches, VoiceOver, composição visual nem FPS. Não foram medidas CPU/RAM novamente após montar os conteúdos reais dos widgets.
+
+A captura interna de General foi inspecionada: as três linhas, descrições, switches e atalhos de configuração formam uma hierarquia legível na área central. A captura de NSView não compõe corretamente alguns materiais/cores da sidebar; ela não certifica a aparência final no monitor. [Relatório de verificações](Validation/2026-11-09-features.json).
+
+O harness widget-motion também passou após fortalecer a regressão: host SwiftUI real e manager/id corretos, nota exibida no NSTextView nativo, edição via insertText propagada ao modelo, nova instância do host ao reexibir com a mesma nota e movimentos sem persistir frames intermediários. Isso valida editor/binding internos, sem afirmar entrega física de teclado.

@@ -70,3 +70,9 @@ A validação distingue editor nativo preparado e binding de ativação/key conc
 Em Camera, `CameraCapPanel` é estreito, preto, sem sombra e sem capacidade de key. O `IslandPanel` com controles continua no nível floating, abaixo do maior limite entre safe area e barra visível. Os dois alimentam o mesmo estado de hover/deadline; passar do cap ao conteúdo mantém a expansão. Abertura por clique é idempotente mesmo após hover. Ambos respeitam a opção explícita de fullScreenAuxiliary e são desmontados juntos.
 
 O cap permanece imóvel durante o resize do corpo. O estado compacto Camera não solicita demanda de dados, mesmo com a antiga opção de status compacto ativada. Preferências antigas decodificam Camera por padrão; uma migração única ativa hover sem descartar aparência, e preserva blobs incompatíveis sem gravá-los.
+
+## Seleção de recursos (0.4.1)
+
+IslandSettings.enabled e DockPreferences.enabled são as fontes persistidas existentes. WidgetManager.enabled é a fonte única para Widgets, persistida em widgets.enabled, com true para instalações antigas. É independente de suspended (repouso) e de WidgetConfiguration.visible (escolha individual). activeKinds e refresh exigem enabled; o desligamento também desmonta painéis em fade e encerra edição. show() retoma suspensão, sem alterar enabled.
+
+General e menu bar usam essas mesmas fontes. MenuNeedsUpdate atualiza as marcas, e ações de abrir Island/editar widgets ficam indisponíveis quando o recurso está desligado. O envelope JSON v1 recebe widgetsEnabled opcional; ausência preserva a escolha local, false é aplicado antes do layout para evitar uma exibição transitória. O timer mantém seu prazo mesmo sem superfície visível.

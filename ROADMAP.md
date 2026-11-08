@@ -94,3 +94,13 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [x] Modo Camera aplicado uma vez às preferências existentes; Floating e aparência mantidos.
 - [x] Regressão para diferença entre safe area de 32 pt e barra visível de 33 pt neste Mac.
 - [ ] Verificação física do ponteiro, composição visual do recorte, Spaces e fullscreen em diferentes MacBooks.
+
+## Seleção de recursos — 0.4.1
+
+- [x] Três switches independentes em General e controles equivalentes no menu bar.
+- [x] Widgets com ativação persistente, separada do repouso e da visibilidade individual.
+- [x] Desmontagem de janelas/conteúdo ao desligar e restauração de notas/layout ao religar.
+- [x] Exportação/importação das escolhas e compatibilidade com JSON antigo.
+- [x] Conteúdo SwiftUI de novos widgets montado de fato; regressão verificada por hierarquia nativa.
+- [x] 62 verificações internas passaram em duas execuções consecutivas; 25 testes de núcleo passaram.
+- [ ] Conferir switches e composição dos widgets com mouse/VoiceOver e refazer profiling com conteúdos reais.

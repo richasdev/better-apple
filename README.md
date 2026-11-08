@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.4.0**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.4.1**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -37,6 +37,14 @@ O projeto Xcode está versionado. Após adicionar/remover arquivos Swift do apli
 - Presets Default, Minimal, Glass, Compact e Custom; importação/exportação JSON de Island, Dock e widgets.
 
 “Implementado” descreve código integrado; veja [ROADMAP.md](ROADMAP.md) para as verificações executadas e os fluxos ainda não validados interativamente. O timer é compartilhado entre Island e widgets e não sobrevive ao encerramento do aplicativo.
+
+## Escolha seus recursos (0.4.1)
+
+Abra **Settings → General → Choose your features** para ligar ou desligar **Dynamic Island**, **Personalized Dock** e **Widgets** independentemente. Cada linha tem acesso à configuração do recurso. Os mesmos três controles estão no menu da barra superior, com marca de seleção para os recursos ligados.
+
+Desligar fecha as janelas e libera a demanda de dados da superfície. Configurações, aplicativos fixados, notas, posições e a visibilidade individual de cada widget permanecem salvos. Ao religar Widgets, apenas os que estavam selecionados voltam. O estado desligado persiste após reiniciar o aplicativo e despertar o Mac. Um temporizador já iniciado continua até seu prazo; desligar uma superfície não cancela o timer compartilhado.
+
+O JSON exporta as três escolhas. Importações antigas sem `widgetsEnabled` mantêm a escolha atual dos Widgets. A Dock do macOS continua independente desses controles.
 
 ## Island integrada à câmera (0.4)
 
