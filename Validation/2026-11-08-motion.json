@@ -1,0 +1,236 @@
+{
+  "date": "2026-11-08",
+  "version": "0.3.0",
+  "sourceRevision": "49086ca9db48b1cefe81878c5f3fef61eac2acc5",
+  "environment": {
+    "macOS": "27.0.1 (26A434)",
+    "Xcode": "27.0 (27A266a)",
+    "host": "arm64 MacBook Pro, 16 GiB",
+    "deploymentTarget": "macOS14"
+  },
+  "builds": {
+    "debugArm64": "passed",
+    "releaseUniversal": "passed",
+    "releaseArchitectures": [
+      "arm64",
+      "x86_64"
+    ]
+  },
+  "coreTests": {
+    "executed": 15,
+    "failures": 0
+  },
+  "nativeHarnesses": {
+    "count": 6,
+    "result": "passed",
+    "suites": [
+      "services",
+      "productivity",
+      "dock",
+      "widgets",
+      "dock-motion",
+      "widget-motion"
+    ]
+  },
+  "runtimeValidation": {
+    "checks": {
+      "all widget kinds created": true,
+      "appearance updates preserve island window and calculation": true,
+      "auto-close respects actual pointer": true,
+      "compact island releases demand": true,
+      "disabled motion collapses without lingering content": true,
+      "disabled motion has no delayed visible content": true,
+      "dock error settings action routes to dock": true,
+      "dock resolves real applications": true,
+      "early native editor input reaches calculator": true,
+      "explicit open prepares native editor during expansion": true,
+      "feedback notice permits intentional focus without taking it": true,
+      "feedback notice teardown removes its window": true,
+      "hidden widgets release demand": true,
+      "hover expansion never requests keyboard activation": true,
+      "invalid suite import preserves settings": true,
+      "island pin and dismiss": true,
+      "island window expanded": true,
+      "legacy suite imports without losing notes": true,
+      "notes updated": true,
+      "pin protects against pending auto-close": true,
+      "rapid module reversal prepares correct native editor": true,
+      "rapid reversal and preference edit settle exact compact geometry": true,
+      "safe calculator evaluates": true,
+      "settings request clears stale island focus intent": true,
+      "settings window presented": true,
+      "shared calculator commits optional history": true,
+      "suite JSON restores actual settings and widgets": true,
+      "suite restores new personalization": true,
+      "timer completed": true,
+      "timer draft validates actual text including locale": true,
+      "widget duplication preserves note and appearance": true,
+      "workspace preset remains selected": true
+    },
+    "interactionContext": {
+      "activationPolicy": 1,
+      "appActive": false,
+      "unverified": [
+        "macOS did not grant foreground key activation; prepared editor and binding are tested without claiming global typing delivery",
+        "macOS did not grant Settings key activation; focus retention relative to other applications is not certified"
+      ]
+    },
+    "passed": true,
+    "windowCount": 7
+  },
+  "motionSamples": [
+    {
+      "activationPolicy": 1,
+      "appActive": false,
+      "contentVisible": false,
+      "event": "explicit_open_55ms",
+      "height": 167,
+      "isKey": false,
+      "keyboardEditor": true,
+      "request": 1,
+      "responder": "_SystemTextFieldFieldEditor",
+      "width": 272
+    },
+    {
+      "activationPolicy": 1,
+      "appActive": false,
+      "event": "settings_before_default",
+      "keyIsIsland": false,
+      "request": 0,
+      "title": "nil"
+    },
+    {
+      "activationPolicy": 1,
+      "appActive": false,
+      "event": "settings_after_default",
+      "keyIsIsland": false,
+      "request": 0,
+      "title": "nil"
+    },
+    {
+      "compactVisible": true,
+      "event": "rapid_reverse_settled",
+      "expanded": false,
+      "height": 34,
+      "width": 322
+    }
+  ],
+  "instruments": {
+    "template": "Animation Hitches",
+    "recordedSeconds": 15.90485,
+    "recordingCompleted": true,
+    "exportedRows": {
+      "hitches": 0,
+      "frames": 0,
+      "surfaces": 0
+    },
+    "usableFrameSamples": 0,
+    "interpretation": "No usable frame samples: neither FPS nor absence of hitches is certified",
+    "workload": {
+      "completed": true,
+      "cycles": 20,
+      "reduceMotion": false,
+      "scope": "finite native window/module workload; no implied frame-rate guarantee"
+    }
+  },
+  "idleRelease": {
+    "conditions": "Compact Island, Settings closed, no enabled Dock/widgets/player; two startup seconds then20 ps samples; RSS is not physical footprint",
+    "samples": [
+      {
+        "cpu": 0.1,
+        "rssKB": 87664.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87664.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87664.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87664.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87376.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87376.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87376.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87376.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87376.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87376.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87392.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87392.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87392.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87392.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87392.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87344.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87344.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87344.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87344.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 87344.0
+      }
+    ],
+    "sampleCount": 20,
+    "intervalSeconds": 1,
+    "cpuMean": 0.005,
+    "cpuMax": 0.1,
+    "rssMiBMean": 85.38046875,
+    "rssMiBMax": 85.609375
+  },
+  "review": "UX_REVIEW.md",
+  "externalComputerUse": "Accessibility permission_denied persists; no permissions changed",
+  "notCertified": [
+    "global foreground typing delivery and focus handoff",
+    "physical pointer and keyboard navigation",
+    "VoiceOver",
+    "frame rate and absence of hitches",
+    "prolonged allocations/leaks and macOS14/15/Intel execution"
+  ]
+}

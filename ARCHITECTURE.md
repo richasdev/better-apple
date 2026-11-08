@@ -54,3 +54,11 @@ CalculatorService é uma instância compartilhada entre Island e widgets; Calcul
 DockPreferences e WidgetDisplayOptions decodificam campos novos com defaults; widgets antigos usam opções ausentes. A suíte valida todos os documentos antes de tocar nos managers e exporta configurações de grade, timer e opt-in de histórico. Histórico matemático e estado de reprodução não entram nos arquivos exportados.
 
 Scripts/validate_native.py compila o núcleo em diretório temporário e executa harnesses reais dos quatro subsistemas, sem bibliotecas de terceiros e sem solicitar Calendar/Automation. O projeto Xcode continua gerado sem dependências externas.
+
+## Movimento, interação e revisão (0.3)
+
+SurfaceMotionPlan no núcleo limita duração, atraso de revelação e fechamento; Reduce Motion/zero duração eliminam o agendamento de conteúdo. WorkspaceMotion fornece curvas e feedback consistentes. Não existem loops decorativos. A Island mantém a árvore do editor montada durante a revelação, mas só direciona foco ao painel explicitamente escolhido; Settings e perda de key limpam a intenção. Conteúdo e geometria usam tarefas finitas invalidadas por geração. Hosting views de painéis com geometria AppKit usam sizingOptions vazio, evitando mínimos implícitos que impedem recolhimento.
+
+Dock e widgets preservam áreas/identidades durante animações, bloqueiam callbacks antigos e não gravam posições transitórias. SurfaceNoticeManager mostra erros de ação sem ativar a aplicação, permite foco intencional, pausa o deadline durante interação e encerra observadores/tarefas ao descartar.
+
+A validação distingue editor nativo preparado e binding de ativação/key concedidos pelo macOS. O relatório inclui contexto não certificado; não se altera a policy de produção para contornar limitações do ambiente. O modo Debug --profile-motion é uma carga finita isolada, não uma função de produção. A revisão por mudança está em UX_REVIEW.md.

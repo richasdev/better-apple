@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.2.0**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.3.0**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -50,6 +50,16 @@ A calculadora é compartilhada entre Island e widgets. Seu histórico é opciona
 
 O JSON mantém compatibilidade com exportações anteriores e agora inclui opções de widgets/grade, preferências do timer e a opção de histórico. Expressões do histórico e temporizadores em execução não são exportados.
 
+## Fluidez e UX 0.3
+
+A Island coordena resize e revelação do conteúdo, preserva a entrada durante a expansão e aceita reversões rápidas. Pedidos de teclado são explícitos e direcionados ao painel; passar o ponteiro não solicita ativação. A Dock amplia ícones e desloca vizinhos sem mudar as áreas estáveis de hover. O auto-hide respeita interação, menus e teclado.
+
+Widgets exibem/ocultam e organizam com transições finitas, preservam notas durante movimento e recusam uma organização sem espaço em vez de sobrepor tudo. O modo de edição traz os widgets à frente. Remover uma nota preenchida pede confirmação. Controles pequenos, conteúdo mínimo, feedback de erro/cópia, entrada inválida do timer e eventos de dia inteiro foram revisados.
+
+Settings mantém sua última seção durante a sessão, tem feedback de hover/press e avisos descartáveis. Erros da Dock geram um aviso nativo com ação para sua seção de configurações. Movimento e transparência reduzidos são respeitados; não há animações decorativas contínuas.
+
+O procedimento de julgamento a cada mudança e seus limites estão em [UX_REVIEW.md](UX_REVIEW.md). Editor/binding, geometria e estados foram testados; isso não certifica teclado físico, VoiceOver, ativação entre aplicações ou 60 FPS.
+
 ## Permissões e privacidade
 
 Calendário só pede acesso após o botão de conexão. Abra Apple Music ou Spotify antes de conectar; o macOS pode solicitar Automation para cada player. Negativas geram mensagem de erro e exigem reconexão explícita. Ajustes de permissões ficam em **System Settings → Privacy & Security**.
@@ -60,7 +70,7 @@ Notas e preferências são armazenadas em UserDefaults no Mac. Exportações JSO
 
 ## Validação
 
-`swift test` executa os testes do parser, countdown e configurações. Execute `python3 Scripts/validate_native.py` para compilar e rodar os quatro harnesses nativos (serviços, produtividade, Dock e widgets), sem solicitar Calendar/Automation. O comando usa Python padrão e o compilador do Xcode, sem dependências externas.
+`swift test` executa os testes do parser, countdown e configurações. Execute `python3 Scripts/validate_native.py` para compilar e rodar os seis harnesses nativos (serviços, produtividade, Dock, widgets e duas suítes de movimento), sem solicitar Calendar/Automation. O comando usa Python padrão e o compilador do Xcode, sem dependências externas.
 
 Build Debug aceita `--validate`: executa verificações internas com UserDefaults isolado e salva resultados/capturas em `/tmp/BetterApple-validation`. Essa rotina abre janelas temporárias, executa um timer curto e encerra. Não é incluída no build Release.
 
@@ -73,3 +83,11 @@ Build Debug aceita `--validate`: executa verificações internas com UserDefault
 [Atoll](https://github.com/Ebullioscopic/Atoll) foi consultado como referência de arquitetura e comportamento. Nenhum código, recurso gráfico ou framework desse projeto GPLv3 foi incorporado. Veja [ARCHITECTURE.md](ARCHITECTURE.md).
 
 A licença de distribuição do BetterApple ainda não foi definida; por isso não há `LICENSE` concedendo direitos de distribuição nesta etapa. Definir licença, revisar marcas para o nome público e preparar assinatura/notarização são requisitos antes de distribuir.
+
+Para uma sequência finita de 20 ciclos destinada ao Instruments, use o build Debug:
+
+```sh
+/opt/homebrew/bin/rtk proxy build/Build/Products/Debug/BetterApple.app/Contents/MacOS/BetterApple --validate --profile-motion
+```
+
+Esse modo utiliza preferências isoladas, respeita Reduce Motion e grava seu resultado em `/tmp/BetterApple-motion-profile`. A validação normal escreve o contexto de ativação e verificações não certificadas junto de seus resultados; falhas reais retornam código diferente de zero.

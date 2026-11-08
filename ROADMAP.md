@@ -10,7 +10,7 @@ Legenda: `[x]` código integrado e verificação indicada; `[ ]` pendente, parci
 - [x] Atalho global opcional configurável; registro, conflito, liberação e persistência verificados em harness.
 - [x] Repositório privado e commits separados por área.
 - [x] Builds reais SPM, Xcode Debug e Xcode Release em Apple silicon.
-- [x] Doze testes do núcleo sem falhas, incluindo temas/presets e histórico de cálculo.
+- [x] Quinze testes do núcleo sem falhas, incluindo temas/presets e histórico de cálculo.
 - [ ] Definir licença de distribuição, marcas, assinatura e notarização.
 
 ## Fase 2 — Dynamic Island
@@ -62,7 +62,7 @@ Legenda: `[x]` código integrado e verificação indicada; `[ ]` pendente, parci
 
 ## Limitação da validação visual
 
-O helper de Computer Use do Orca retornou `permission_denied` para Accessibility ao inspecionar o processo, inclusive após informar permissão concedida. Nenhuma interação externa foi declarada aprovada. Uma repetição inicial confundiu expansão com demanda visível quando havia outra instância aberta; o harness foi corrigido para verificar a geometria real da janela e executado isoladamente. A rotina Debug `--validate` usa os próprios managers e NSViews, sem essa permissão, e passou dezoito verificações. Capturas internas de NSView têm limitações de composição (materiais/alguns conteúdos podem ficar escuros ou vazios) e não substituem captura real e QA manual.
+O helper de Computer Use do Orca retornou `permission_denied` para Accessibility ao inspecionar o processo, inclusive após informar permissão concedida. Nenhuma interação externa foi declarada aprovada. Uma repetição inicial confundiu expansão com demanda visível quando havia outra instância aberta; o harness foi corrigido para verificar a geometria real da janela e executado isoladamente. A rotina Debug `--validate` usa os próprios managers e NSViews, sem essa permissão, e passou 32 verificações internas, com limitações de ativação registradas separadamente. Capturas internas de NSView têm limitações de composição (materiais/alguns conteúdos podem ficar escuros ou vazios) e não substituem captura real e QA manual.
 
 ## Evolução 0.2.0
 
@@ -73,3 +73,16 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [x] Importação das preferências antigas verificada na suíte integrada, preservando notas.
 - [x] Quatro harnesses nativos de serviços, produtividade, Dock e widgets executados.
 - [ ] QA visual/interativo continua limitado pela permissão do helper de Computer Use.
+
+## Evolução 0.3.0 — revisão e movimento
+
+- [x] Sistema compartilhado de feedback/movimento finito e invariantes de acessibilidade testados.
+- [x] Coreografia da Island, retarget/reversão, preparação antecipada do editor e intenção de foco por painel/módulo.
+- [x] Magnificação contínua e recolhimento real da Dock a 10 px, verificados em harness estendido.
+- [x] Animações de widgets sem persistir frames intermediários; retenção de notas/hosting view e overflow seguro.
+- [x] Validação textual e decimal local do timer; feedback consistente, controles maiores e estados vazios/erros revisados.
+- [x] Procedimento permanente de julgamento em AGENTS.md e UX_REVIEW.md.
+- [x] Seis harnesses nativos executados, além de 15 testes do núcleo e 32 verificações integradas.
+- [x] Captura Animation Hitches de 15 s concluída em sequência finita de 20 ciclos.
+- [ ] A captura não trouxe amostras de frames utilizáveis: FPS/ausência de hitches permanecem não certificados.
+- [ ] Ativação real e entrega de teclas entre aplicações/Spaces, mouse/trackpad e VoiceOver continuam sujeitos a QA interativo.

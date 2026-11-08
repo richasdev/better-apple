@@ -53,3 +53,13 @@ A nova rodada executou **12 testes XCTest sem falhas**, **18 verificações inte
 Em Release 0.2.0, com Island compacta, status compacto desligado, Settings fechada, sem Dock/widgets ou player conectado, foram feitas 20 leituras de ps a cada segundo, após 2 segundos iniciais: RSS médio **76,41 MiB**, máximo **84,03 MiB**; CPU média reportada **0,01%**, máxima **0,2%**. São amostras curtas, não uma comprovação de redução em relação a 0.1 nem da meta em uso comum. Os dados estão em Validation/2026-11-08-personalization.json.
 
 Status compacto ao vivo é opt-in: o serviço do módulo selecionado segue a mesma frequência de uma Island expandida, apenas enquanto a janela está visível. Clocks sem segundos usam agendamento alinhado a um minuto. Novos temas, presets e preferências não criam novos timers globais. Reduce Transparency usa fundos opacos nas três superfícies.
+
+## Movimento e UX 0.3.0
+
+Validação: **15 testes do núcleo**, **32 verificações internas** e **seis harnesses nativos** passaram. As verificações incluem reversão rápida, geometria final, movimentação sem salvar frames transitórios, recolhimento da Dock a 10 px, preparação do editor durante a expansão e input no binding. Ativação/key em primeiro plano não foram concedidos pelo contexto do macOS e aparecem separadamente como não certificados.
+
+Uma captura **Animation Hitches** de **15,90 s** concluiu durante a carga Debug de 20 ciclos finitos (Reduce Motion desligado). Os exports de hitches, frame lifetimes e superfícies não trouxeram linhas utilizáveis. **Zero linhas não prova zero hitches**: não há resultado de FPS ou ausência de hitches. O trace bruto fica local em `/tmp`; somente resumo e escopo foram versionados.
+
+No Release 0.3.0 em repouso, Island compacta, Settings fechada e sem Dock/widgets/player habilitados: 20 leituras de ps, uma por segundo após 2 s iniciais, deram RSS médio **85,38 MiB**, máximo **85,61 MiB**, CPU média reportada **0,005%**, máxima **0,1%**. Trata-se de amostra curta e RSS, sem garantia de footprint físico, RAM em uso comum ou ausência de vazamentos.
+
+O modo `--validate --profile-motion` existe apenas em Debug, usa preferências isoladas e encerra após o trabalho finito. Não adiciona animações em repouso no aplicativo Release. Resultados completos em `Validation/2026-11-08-motion.json` e julgamento por alteração em `UX_REVIEW.md`.
