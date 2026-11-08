@@ -87,7 +87,7 @@ struct IslandView: View {
                 Button(action: open) {
                     Group {
                         if cameraMode {
-                            Color.black.contentShape(Rectangle())
+                            Color.clear.contentShape(Rectangle())
                         } else if model.settings.island.minimal {
                             Capsule().fill(appearance.accent.color).frame(width: 28, height: 3)
                         } else if appearance.compactStatus {
@@ -109,10 +109,17 @@ struct IslandView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
-            IslandSurface(appearance: appearance, radius: radius)
-                .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: appearance.animationDuration), value: state.expanded)
+            if cameraMode {
+                if state.expanded || state.expandedContentVisible {
+                    UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: radius,
+                        bottomTrailingRadius: radius, topTrailingRadius: 0).fill(.black)
+                }
+            } else {
+                IslandSurface(appearance: appearance, radius: radius)
+                    .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: appearance.animationDuration), value: state.expanded)
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .clipShape(IslandOutline(camera: cameraMode, radius: radius))
         .tint(appearance.accent.color)
         .accentColor(appearance.accent.color)
         .environment(\.workspaceMotionDisabled, motionDisabled)
@@ -154,5 +161,21 @@ private struct IslandCompactContent: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in currentDate = .now }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in currentDate = .now }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in currentDate = .now }
+    }
+}
+
+private struct IslandOutline: Shape {
+    let camera: Bool
+    var radius: CGFloat
+    var animatableData: CGFloat {
+        get { radius }
+        set { radius = newValue }
+    }
+    func path(in rect: CGRect) -> Path {
+        if camera {
+            return UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: radius,
+                bottomTrailingRadius: radius, topTrailingRadius: 0).path(in: rect)
+        }
+        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect)
     }
 }

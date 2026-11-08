@@ -17,7 +17,7 @@ struct IslandSettingsView: View {
                 Picker("Placement", selection: $model.settings.island.placementMode) {
                     ForEach(IslandPlacement.allCases) { Text($0.title).tag($0) }
                 }
-                Text(cameraMode ? "Aligned with the physical MacBook camera cutout. A 4 pt black edge remains below it for hover; expanded controls open underneath. On a display without a notch, an 80 × 8 pt handle sits below the menu bar." : "A separate floating surface below the menu bar, with adjustable offsets.")
+                Text(cameraMode ? "Aligned with the physical MacBook camera cutout. A 4 pt black edge remains below it for hover; expanded controls open underneath. On a display without a camera cutout, the same black notch shape is drawn flush with the top edge." : "A separate floating surface below the menu bar, with adjustable offsets.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Displays") {
@@ -26,7 +26,7 @@ struct IslandSettingsView: View {
                     Text("Every connected display").tag(true)
                 }
                 Text(model.settings.island.allDisplays
-                     ? "Each display gets an Island. Expansion and the selected module are shared; displays without a camera cutout use the slim handle."
+                     ? "Each display gets an Island. Expansion and the selected module are shared; displays without a camera cutout draw the same notch silhouette."
                      : (cameraMode ? "Uses the first display with a camera cutout, even when an external monitor is primary. If none has a cutout, uses the primary display." : "Uses the primary display configured in macOS."))
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Allow over full-screen apps", isOn: $model.settings.island.showInFullScreen)
@@ -37,11 +37,9 @@ struct IslandSettingsView: View {
                 HStack {
                     Spacer()
                     if cameraMode {
-                        VStack(spacing: 0) {
-                            UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 10, bottomTrailingRadius: 10, topTrailingRadius: 0)
-                                .fill(.black).frame(width: 140, height: 30)
-                            Capsule().fill(.black).frame(width: 148, height: 4).offset(y: -2)
-                        }.accessibilityLabel("Discreet black camera edge preview")
+                        NotchCapShape(bottomRadius: 10).fill(.black)
+                            .frame(width: 209, height: 37)
+                            .accessibilityLabel("Top-attached notch with inward shoulders and rounded bottom corners")
                     } else {
                     Label("BetterApple", systemImage: "circle.lefthalf.filled")
                         .font(.system(size: 13, weight: .medium))
@@ -100,7 +98,7 @@ struct IslandSettingsView: View {
                     slider("Horizontal offset", value: $model.settings.island.offsetX, range: -500...500)
                     slider("Distance below menu bar", value: $model.settings.island.offsetY, range: 0...200)
                 } else {
-                    Text("Compact size and position follow the measured camera cutout automatically. Switch to Floating to adjust them manually.")
+                    Text("Size and position follow the measured camera cutout. Other displays draw a matching notch at the top. Switch to Floating for manual positioning.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

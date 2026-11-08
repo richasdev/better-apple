@@ -8,7 +8,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets", "dock-motion", "widget-motion"], default="all")
+parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets", "dock-motion", "widget-motion", "notch-shape"], default="all")
 selection = parser.parse_args().only
 architecture = platform.machine()
 if architecture not in {"arm64", "x86_64"}:
@@ -42,6 +42,8 @@ with tempfile.TemporaryDirectory(prefix="betterapple-native-check-") as temporar
     }
     checks["dock-motion"] = (checks["dock"][0], "dock-motion-smoke.swift")
     checks["widget-motion"] = (checks["widgets"][0], "widget-motion-smoke.swift")
+    checks["notch-shape"] = ([root / "Sources/BetterApple/Features/DynamicIsland/IslandState.swift",
+                              root / "Sources/BetterApple/Features/DynamicIsland/CameraCapView.swift"], "notch-shape-smoke.swift")
     for name, (sources, script) in checks.items():
         if selection not in {"all", name}:
             continue

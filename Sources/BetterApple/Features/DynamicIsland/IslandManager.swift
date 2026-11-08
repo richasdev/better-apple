@@ -16,16 +16,6 @@ final class CameraCapPanel: NSPanel {
 }
 
 @MainActor
-final class IslandState: ObservableObject {
-    @Published var expanded = false
-    @Published var pinned = false
-    @Published var selected: ModuleID = .calculator
-    @Published var expandedContentVisible = false
-    @Published var compactContentVisible = true
-    @Published var focusRequest = 0
-}
-
-@MainActor
 final class IslandManager {
     let state = IslandState()
     private let model: AppModel
@@ -127,10 +117,14 @@ final class IslandManager {
                 trigger.isReleasedWhenClosed = false; trigger.isOpaque = false; trigger.backgroundColor = .clear
                 trigger.hasShadow = false; trigger.animationBehavior = .none; trigger.hidesOnDeactivate = false
                 trigger.level = .statusBar
-                let view = NSHostingView(rootView: CameraCapView(
+                let view = NSHostingView(rootView: CameraCapView(state: state,
                     hover: { [weak self, weak trigger] inside in if let trigger { self?.handlePointer(inside, panel: trigger) } },
                     expand: { [weak self] in self?.open() }))
-                view.sizingOptions = []; trigger.contentView = view; cap = trigger
+                view.sizingOptions = []
+                let container = NSView(frame: .zero)
+                view.autoresizingMask = [.width, .height]
+                container.addSubview(view)
+                trigger.contentView = container; cap = trigger
             }
             destinations.append((panel, screen, cap))
         }
@@ -269,23 +263,35 @@ final class IslandManager {
             let size = NSSize(width: min(available.width, state.expanded ? settings.expandedWidth : settings.width),
                               height: min(max(0, top - available.minY), state.expanded ? settings.expandedHeight : (settings.minimal ? 12 : settings.height)))
             let rect: NSRect
+            var capRect: NSRect?
             if settings.placementMode == .camera {
                 let geometry = cameraLayout(for: screen)
                 rect = geometry.bodyFrame
-                if let frame = geometry.capFrame { cap?.setFrame(frame, display: true) }
+                capRect = geometry.capFrame
             } else {
                 rect = NSRect(x: min(available.maxX - size.width, max(available.minX, screen.frame.midX - size.width / 2 + settings.offsetX)),
                               y: max(available.minY, top - size.height - settings.offsetY), width: size.width, height: size.height)
             }
             panel.hasShadow = settings.visual.shadowVisible && (state.expanded || settings.placementMode == .floating)
-            guard panel.frame != rect else { continue }
+            guard panel.frame != rect || (capRect != nil && cap?.frame != capRect) else { continue }
             if duration > 0 {
                 geometryDeadline = max(geometryDeadline, ProcessInfo.processInfo.systemUptime + duration)
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = duration; context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: state.expanded)
                     panel.animator().setFrame(rect, display: true)
+                    if let cap, let capRect { cap.animator().setFrame(capRect, display: true) }
                 }
-            } else { panel.setFrame(rect, display: true) }
+            } else {
+                // Replace pending animator targets too: an interrupted expansion
+                // must not restore its old frame after an immediate settings edit.
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0
+                    panel.animator().setFrame(rect, display: true)
+                    if let cap, let capRect { cap.animator().setFrame(capRect, display: true) }
+                }
+                panel.setFrame(rect, display: true)
+                if let capRect { cap?.setFrame(capRect, display: true) }
+            }
         }
         settleGeometryAfterInterruption()
     }
