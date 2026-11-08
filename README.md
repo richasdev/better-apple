@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.4.2**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.5.0**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -38,9 +38,13 @@ O projeto Xcode está versionado. Após adicionar/remover arquivos Swift do apli
 
 “Implementado” descreve código integrado; veja [ROADMAP.md](ROADMAP.md) para as verificações executadas e os fluxos ainda não validados interativamente. O timer é compartilhado entre Island e widgets e não sobrevive ao encerramento do aplicativo.
 
+## Silhueta Notchy (0.5)
+
+A parte superior e o corpo animam juntos com a mesma curva e duração, mantendo o topo imóvel. Uma sobreposição preta de 4 pt evita costuras; a parte de cima não toma foco e usa o mesmo hover do conteúdo. Em todas as telas o desenho é preso à borda superior, incluindo monitores sem câmera. O modo Floating continua disponível com os ajustes anteriores. Nenhuma imagem ou código do aplicativo de referência foi incorporado.
+
 ## Clareza de configuração (0.4.2)
 
-Dynamic Island tem uma seção Displays explícita: câmera/monitor automático ou todas as telas, explicando o fallback sem notch e o estado expandido compartilhado. No modo Camera, controles exclusivos de Floating ficam ocultos, com seus valores preservados. A Dock separa posição, comportamento, aparência e movimento, mostra unidades e pode ter seus apps configurados enquanto desligada, sem abrir janelas.
+Dynamic Island tem uma seção Displays explícita: câmera/monitor automático ou todas as telas, explicando o notch desenhado em monitores comuns e o estado expandido compartilhado. No modo Camera, controles exclusivos de Floating ficam ocultos, com seus valores preservados. A Dock separa posição, comportamento, aparência e movimento, mostra unidades e pode ter seus apps configurados enquanto desligada, sem abrir janelas.
 
 ## Escolha seus recursos (0.4.1)
 
@@ -50,11 +54,11 @@ Desligar fecha as janelas e libera a demanda de dados da superfície. Configura�
 
 O JSON exporta as três escolhas. Importações antigas sem `widgetsEnabled` mantêm a escolha atual dos Widgets. A Dock do macOS continua independente desses controles.
 
-## Island integrada à câmera (0.4)
+## Island integrada à câmera (0.5)
 
-O posicionamento **Camera** fica centralizado no recorte físico do MacBook, com uma borda preta de 4 pontos quando recolhido. Ao passar o ponteiro, o conteúdo expande para baixo sem solicitar foco de teclado; clicar abre e prepara os controles. Sair recolhe após o atraso configurado, respeitando pin e edição. A câmera não é acessada nem exige permissão.
+O posicionamento **Camera** usa uma silhueta preta de notch presa ao topo, com cantos superiores côncavos e inferiores arredondados. No MacBook, alinha-se ao recorte físico e deixa uma borda de 4 pontos quando recolhido. Ao passar o ponteiro, o conteúdo expande para baixo sem solicitar foco de teclado; clicar abre e prepara os controles. Sair recolhe após o atraso configurado, respeitando pin e edição. A câmera não é acessada nem exige permissão.
 
-O recorte é medido pelas áreas auxiliares públicas de `NSScreen`. Um painel estreito cobre somente esse espaço; os controles ficam abaixo da câmera e da barra de menus. Em uma tela sem notch, o fallback é uma faixa de 80 × 8 pontos abaixo da barra. Com apenas uma Island, a tela com notch tem preferência sobre um monitor externo principal.
+O recorte é medido pelas áreas auxiliares públicas de `NSScreen`. A parte superior acompanha a largura do corpo ao expandir; os controles ficam abaixo da faixa da câmera/barra. Em monitores sem notch, desenha o mesmo formato no topo, usando 185 pt como largura compacta e uma faixa superior mínima de 32 pt. A área central da barra fica coberta pelo notch desenhado, incluindo durante a expansão. Com apenas uma Island, a tela com notch tem preferência sobre um monitor externo principal.
 
 O modo Camera usa preto opaco para combinar com o recorte. Em **Dynamic Island → Placement → Floating**, continuam disponíveis deslocamentos, vidro, opacidade e temas armazenados. A atualização ativa Camera e hover uma única vez, preservando widgets, notas e preferências visuais; escolhas posteriores são respeitadas.
 

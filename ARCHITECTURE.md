@@ -65,11 +65,11 @@ A validação distingue editor nativo preparado e binding de ativação/key conc
 
 ## Âncora da câmera (0.4)
 
-`CameraIslandGeometry` recebe retângulos globais e calcula a geometria sem AppKit. O gap validado entre `auxiliaryTopLeftArea` e `auxiliaryTopRightArea` determina centro e largura físicos. Coordenadas negativas são mantidas. Sem medições válidas, nenhum painel de nível statusBar é criado sobre menus.
+`CameraIslandGeometry` recebe retângulos globais e calcula a geometria sem AppKit. O gap validado entre `auxiliaryTopLeftArea` e `auxiliaryTopRightArea` determina centro e largura físicos. Coordenadas negativas são mantidas. Na versão 0.5, sem medições válidas, usa-se um notch visual de 185 pt em vez de presumir hardware existente. Um cap é criado em todo monitor válido, conforme a referência visual solicitada.
 
-Em Camera, `CameraCapPanel` é estreito, preto, sem sombra e sem capacidade de key. O `IslandPanel` com controles continua no nível floating, abaixo do maior limite entre safe area e barra visível. Os dois alimentam o mesmo estado de hover/deadline; passar do cap ao conteúdo mantém a expansão. Abertura por clique é idempotente mesmo após hover. Ambos respeitam a opção explícita de fullScreenAuxiliary e são desmontados juntos.
+Em Camera, `CameraCapPanel` é preto, sem sombra e sem capacidade de key, acompanhando a largura do corpo mais os ombros côncavos de 12 pt em cada lado. O `IslandPanel` com controles continua no nível floating, abaixo do maior limite entre safe area e barra visível. Os dois alimentam o mesmo estado de hover/deadline; passar do cap ao conteúdo mantém a expansão. Abertura por clique é idempotente mesmo após hover. Ambos respeitam a opção explícita de fullScreenAuxiliary e são desmontados juntos.
 
-O cap permanece imóvel durante o resize do corpo. O estado compacto Camera não solicita demanda de dados, mesmo com a antiga opção de status compacto ativada. Preferências antigas decodificam Camera por padrão; uma migração única ativa hover sem descartar aparência, e preserva blobs incompatíveis sem gravá-los.
+O topo do cap permanece imóvel, enquanto posição horizontal/largura e corpo são animados no mesmo NSAnimationContext. O estado compacto Camera não solicita demanda de dados, mesmo com a antiga opção de status compacto ativada. Preferências antigas decodificam Camera por padrão; uma migração única ativa hover sem descartar aparência, e preserva blobs incompatíveis sem gravá-los.
 
 ## Seleção de recursos (0.4.1)
 
@@ -82,3 +82,11 @@ General e menu bar usam essas mesmas fontes. MenuNeedsUpdate atualiza as marcas,
 IslandSettingsView deriva os controles da placementMode: opções visuais e geométricas de Floating não aparecem no modo Camera, sem remover seus valores persistidos. O picker de cobertura continua usando allDisplays, com descrição explícita do estado compartilhado e fallback. Não mudou a política de janelas.
 
 DockManager.prepareSettings faz uma atualização pontual dos metadados, sem ativar a Dock. Alterações de paths/showRunningApplications enquanto desligada também atualizam a lista por evento. DockSettingsView separa comportamento/posição/aparência e fornece unidades tanto visuais quanto acessíveis.
+
+## Notch contínuo em todas as telas (0.5)
+
+CameraIslandGeometry agora usa o mesmo caminho para hardware e notch visual: faixa superior igual ao maior entre safe area, barra visível e mínimo visual de 32 pt sem câmera. O cap fica encostado a screen.frame.maxY e sobrepõe o corpo em 4 pt. O corpo começa abaixo da faixa reservada. Cap e corpo têm o mesmo centro; a largura do cap inclui 12 pt por ombro. Medidas são limitadas para telas pequenas e coordenadas globais negativas.
+
+NotchCapShape desenha os ombros côncavos e os cantos inferiores recolhidos; IslandOutline deixa o topo do corpo reto e arredonda somente a base. Cap e corpo usam containers NSView com autoresizing, isolando o dimensionamento AppKit do hosting SwiftUI. O NSAnimationContext move as duas janelas com a mesma curva/duração e a reconciliação imediata substitui também alvos pendentes do animator.
+
+A silhueta larga passa deliberadamente pela área central da barra de menus, como solicitado na referência. A opção de participação em fullscreen continua explícita. O desenho não usa câmera, API privada, janela transparente de tela inteira nem polling extra.

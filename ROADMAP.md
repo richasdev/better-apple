@@ -112,3 +112,12 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [x] Dock organizada por posição, comportamento, aparência e movimento, com unidades acessíveis.
 - [x] Apps fixados podem ser editados com a Dock desligada sem metadados obsoletos ou novas janelas.
 - [ ] Perfis de aparência/estado independentes por monitor, customização de ícones e separadores não implementados.
+
+## Silhueta Notchy — 0.5
+
+- [x] Substituir o fallback de faixa por notch preso ao topo em monitores comuns.
+- [x] Ombros côncavos, corpo com topo reto e base arredondada.
+- [x] Cap e corpo animados juntos, com sobreposição contínua e hover compartilhado.
+- [x] Geometria física/sintética, coordenadas negativas, limites e reversões verificados.
+- [x] Smoke de paths SwiftUI e inspeção de raster offscreen do contorno.
+- [ ] Conferir composição física sobre menus e interação em diferentes versões macOS/Spaces.

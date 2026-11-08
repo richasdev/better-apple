@@ -83,3 +83,17 @@ A revisão identificou que editar apps fixados com a Dock desligada podia deixar
 Julgamento: preferimos explicar o efeito e mostrar apenas ajustes aplicáveis, mantendo o modo flutuante disponível para liberdade visual. A configuração de todos os monitores ainda compartilha aparência e estado, sem perfis independentes por tela. O recorte físico não é desenhável: cap estreito no gap medido e borda abaixo integram o conteúdo à câmera. Não se certifica composição visual, gesto físico, VoiceOver ou FPS pela compilação e estado de janelas.
 
 Validação: build Debug e 64 verificações internas passaram, incluindo criação de uma Island por tela conectada e expansão compartilhada. Smoke nativo da Dock passou com edição de metadados desligada, preferências e bytes persistidos preservados e zero janelas. Na primeira execução combinada, a contagem de widgets incluiu uma nota com alpha zero ainda em retirada de um caso anterior; o novo fixture agora desmonta esses painéis antes de iniciar sua contagem independente. As verificações multi-display já passaram nessa execução inicial. Nenhuma medição nova de CPU/RAM/FPS. [Relatório](Validation/2026-11-09-settings-review.json).
+
+## Silhueta Notchy em todas as telas — 0.5.0
+
+Referência fornecida pelo usuário: imagem anexada e [short enviado](https://www.youtube.com/shorts/ZMaE1vlID-s). A imagem define o contorno: preto, topo preso à borda, ombros côncavos e base arredondada. O acesso ao YouTube retornou metadados, sem frames reproduzíveis; a análise visual usou a imagem anexada. Nenhum código/asset do aplicativo de referência foi copiado.
+
+Problema: a faixa de 80 × 8 pt em monitor comum e o cap estreito fixo não reproduziam a forma solicitada. A expansão tinha um corpo visualmente separado, com cantos superiores arredondados.
+
+Alteração: a mesma silhueta aparece em toda tela. No MacBook, o gap físico calibra centro/largura. Sem recorte ou sem medidas auxiliares válidas, um notch visual de 185 pt usa faixa mínima de 32 pt, encostado ao topo. O cap inclui ombros côncavos de 12 pt e acompanha a largura do corpo, com sobreposição preta de 4 pt; o corpo tem topo reto e base arredondada. A área central dos menus é coberta deliberadamente pela silhueta, conforme a referência.
+
+Movimento: cap e corpo usam o mesmo NSAnimationContext, curva e duração pessoal, com expansão desacelerada e fechamento mais curto. Reduce Motion/zero duração mantêm reconciliação imediata. O cap também recebeu container NSView para evitar o resize automático do hosting. A regressão de reversão rápida do modo Floating ainda falhou inicialmente por alvo antigo do animator; a reconciliação imediata agora substitui esse alvo nas duas janelas, usando os containers isolados. As verificações da nova geometria já passavam antes dessa correção.
+
+Julgamento visual: o smoke novo renderiza o CameraCapView e o corpo nativos em fundo claro. O PNG temporário foi inspecionado: ombros côncavos, contorno compacto e união expandida contínua sem costura no raster. Paths reais testam canto interno/externo, raio, coordenadas deslocadas, tamanhos pequenos e sobreposição. Esse raster é um diagnóstico offscreen, não captura física sobre a barra de menus.
+
+Evidência: 26 testes do núcleo e smoke notch-shape passaram. A rotina nativa completa passou duas vezes consecutivas após a correção do animator; a última execução verificou 74 condições, incluindo cap e corpo reais após reversões, hover bidirecional, identidade, edição de largura e todas as telas conectadas. [Relatório](Validation/2026-11-09-notchy.json).
