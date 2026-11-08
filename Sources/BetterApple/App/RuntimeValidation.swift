@@ -105,6 +105,7 @@ enum RuntimeValidation {
             checks["compact island releases demand"] = app.island.activeModule == nil
             checks.merge(try await InteractionValidation.run(app, directory: directory)) { _, new in new }
             checks.merge(try await CameraPlacementValidation.run(app, directory: directory)) { _, new in new }
+            checks.merge(try await FeatureToggleValidation.run(app, directory: directory)) { _, new in new }
         } catch { failure = error.localizedDescription }
         let passed = failure == nil && !checks.isEmpty && checks.values.allSatisfy { $0 }
         var result: [String: Any] = ["checks": checks, "passed": passed, "windowCount": NSApp.windows.count]
