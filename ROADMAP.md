@@ -104,3 +104,11 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [x] Conteúdo SwiftUI de novos widgets montado de fato; regressão verificada por hierarquia nativa.
 - [x] 62 verificações internas passaram em duas execuções consecutivas; 25 testes de núcleo passaram.
 - [ ] Conferir switches e composição dos widgets com mouse/VoiceOver e refazer profiling com conteúdos reais.
+
+## Revisão de conceitos — 0.4.2
+
+- [x] Cobertura de telas explícita para Island, com descrição do fallback e expansão compartilhada.
+- [x] Camera mostra apenas os controles aplicáveis; Floating mantém suas preferências.
+- [x] Dock organizada por posição, comportamento, aparência e movimento, com unidades acessíveis.
+- [x] Apps fixados podem ser editados com a Dock desligada sem metadados obsoletos ou novas janelas.
+- [ ] Perfis de aparência/estado independentes por monitor, customização de ícones e separadores não implementados.

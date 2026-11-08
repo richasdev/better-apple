@@ -71,3 +71,15 @@ Evidência desta etapa: 25 testes do núcleo sem falhas e 62 verificações inte
 A captura interna de General foi inspecionada: as três linhas, descrições, switches e atalhos de configuração formam uma hierarquia legível na área central. A captura de NSView não compõe corretamente alguns materiais/cores da sidebar; ela não certifica a aparência final no monitor. [Relatório de verificações](Validation/2026-11-09-features.json).
 
 O harness widget-motion também passou após fortalecer a regressão: host SwiftUI real e manager/id corretos, nota exibida no NSTextView nativo, edição via insertText propagada ao modelo, nova instância do host ao reexibir com a mesma nota e movimentos sem persistir frames intermediários. Isso valida editor/binding internos, sem afirmar entrega física de teclado.
+
+## Revisão de conceitos e configuração — 0.4.2
+
+Problemas: a pergunta do usuário revelou ambiguidade entre recorte físico, posição da janela e cobertura de monitores. Camera mostrava numerosos controles desativados que só fazem sentido em Floating. A Dock misturava posição e comportamento e seus números não tinham unidades.
+
+Alterações: Displays agora explicita câmera/monitor automático ou todos, fallback sem notch e expansão/módulo compartilhados. Controles exclusivos de Floating ficam ocultos no modo Camera, preservando valores. A Dock separa Placement/Behavior/Appearance/Motion e apresenta pt, %, × e s, incluindo valores de acessibilidade. Não foram adicionadas transições, timers ou permissões; switches e pickers continuam nativos.
+
+A revisão identificou que editar apps fixados com a Dock desligada podia deixar a lista de metadados obsoleta. Mudanças na lista e abertura das Settings agora a atualizam por evento, sem criar janelas. O carregamento inicial já existia e não foi tratado como uma falha de startup.
+
+Julgamento: preferimos explicar o efeito e mostrar apenas ajustes aplicáveis, mantendo o modo flutuante disponível para liberdade visual. A configuração de todos os monitores ainda compartilha aparência e estado, sem perfis independentes por tela. O recorte físico não é desenhável: cap estreito no gap medido e borda abaixo integram o conteúdo à câmera. Não se certifica composição visual, gesto físico, VoiceOver ou FPS pela compilação e estado de janelas.
+
+Validação: build Debug e 64 verificações internas passaram, incluindo criação de uma Island por tela conectada e expansão compartilhada. Smoke nativo da Dock passou com edição de metadados desligada, preferências e bytes persistidos preservados e zero janelas. Na primeira execução combinada, a contagem de widgets incluiu uma nota com alpha zero ainda em retirada de um caso anterior; o novo fixture agora desmonta esses painéis antes de iniciar sua contagem independente. As verificações multi-display já passaram nessa execução inicial. Nenhuma medição nova de CPU/RAM/FPS. [Relatório](Validation/2026-11-09-settings-review.json).

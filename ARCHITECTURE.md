@@ -76,3 +76,9 @@ O cap permanece imóvel durante o resize do corpo. O estado compacto Camera não
 IslandSettings.enabled e DockPreferences.enabled são as fontes persistidas existentes. WidgetManager.enabled é a fonte única para Widgets, persistida em widgets.enabled, com true para instalações antigas. É independente de suspended (repouso) e de WidgetConfiguration.visible (escolha individual). activeKinds e refresh exigem enabled; o desligamento também desmonta painéis em fade e encerra edição. show() retoma suspensão, sem alterar enabled.
 
 General e menu bar usam essas mesmas fontes. MenuNeedsUpdate atualiza as marcas, e ações de abrir Island/editar widgets ficam indisponíveis quando o recurso está desligado. O envelope JSON v1 recebe widgetsEnabled opcional; ausência preserva a escolha local, false é aplicado antes do layout para evitar uma exibição transitória. O timer mantém seu prazo mesmo sem superfície visível.
+
+## Clareza das Settings (0.4.2)
+
+IslandSettingsView deriva os controles da placementMode: opções visuais e geométricas de Floating não aparecem no modo Camera, sem remover seus valores persistidos. O picker de cobertura continua usando allDisplays, com descrição explícita do estado compartilhado e fallback. Não mudou a política de janelas.
+
+DockManager.prepareSettings faz uma atualização pontual dos metadados, sem ativar a Dock. Alterações de paths/showRunningApplications enquanto desligada também atualizam a lista por evento. DockSettingsView separa comportamento/posição/aparência e fornece unidades tanto visuais quanto acessíveis.

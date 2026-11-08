@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.4.1**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.4.2**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -37,6 +37,10 @@ O projeto Xcode está versionado. Após adicionar/remover arquivos Swift do apli
 - Presets Default, Minimal, Glass, Compact e Custom; importação/exportação JSON de Island, Dock e widgets.
 
 “Implementado” descreve código integrado; veja [ROADMAP.md](ROADMAP.md) para as verificações executadas e os fluxos ainda não validados interativamente. O timer é compartilhado entre Island e widgets e não sobrevive ao encerramento do aplicativo.
+
+## Clareza de configuração (0.4.2)
+
+Dynamic Island tem uma seção Displays explícita: câmera/monitor automático ou todas as telas, explicando o fallback sem notch e o estado expandido compartilhado. No modo Camera, controles exclusivos de Floating ficam ocultos, com seus valores preservados. A Dock separa posição, comportamento, aparência e movimento, mostra unidades e pode ter seus apps configurados enquanto desligada, sem abrir janelas.
 
 ## Escolha seus recursos (0.4.1)
 
