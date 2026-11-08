@@ -5,3 +5,5 @@ build/
 xcuserdata/
 .swiftpm/
 Artifacts/
+*.trace
+*.xcresult

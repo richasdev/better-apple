@@ -62,6 +62,7 @@ final class SurfaceNoticeManager {
         if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }; keyObserver = nil
         guard let closing = panel else { return }
         panel = nil
+        closing.ignoresMouseEvents = true
         let close = { closing.orderOut(nil); closing.contentView = nil; closing.close() }
         if animated && closing.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             NSAnimationContext.runAnimationGroup { context in
