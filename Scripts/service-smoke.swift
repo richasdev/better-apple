@@ -43,6 +43,30 @@ struct ServiceSmoke {
         assert(music.selectedPlayer.id == "smoke-player")
         assert(!music.isConnected && music.errorMessage != nil)
         music.disconnect()
+        let suite = "app.betterapple.shortcut-smoke." + UUID().uuidString
+        let preferences = UserDefaults(suiteName: suite)!
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let shortcut = GlobalShortcutService(defaults: preferences)
+        assert(!shortcut.enabled && !shortcut.isRegistered && shortcut.errorMessage == nil)
+        shortcut.key = .i
+        shortcut.modifiers = .controlShift
+        shortcut.enabled = true
+        assert(shortcut.isRegistered || shortcut.errorMessage != nil)
+        if shortcut.isRegistered {
+            let duplicate = GlobalShortcutService(defaults: preferences)
+            assert(!duplicate.isRegistered && duplicate.errorMessage != nil)
+            shortcut.enabled = false
+            duplicate.retryRegistration()
+            assert(duplicate.isRegistered && duplicate.errorMessage == nil)
+            duplicate.enabled = false
+        } else {
+            print("Shortcut registration unavailable on this host: \(shortcut.errorMessage ?? "unknown")")
+            shortcut.enabled = false
+        }
+        assert(!shortcut.isRegistered)
+        let restored = GlobalShortcutService(defaults: preferences)
+        assert(!restored.enabled && restored.key == .i && restored.modifiers == .controlShift)
+        restored.stop()
         let system = SystemStatusService()
         system.start()
         RunLoop.main.run(until: Date().addingTimeInterval(3.3))
@@ -51,7 +75,7 @@ struct ServiceSmoke {
         if let battery = system.batteryLevel { assert((0...1).contains(battery)) }
         if let volume = system.outputVolume { assert((0...1).contains(volume)) }
         assert(system.networkBytesPerSecond >= 0)
-        print("PASS: Timer start/pause/resume/cancel/NaN guard; Music no startup connection and custom adapter registration/selection; live public system readings.")
+        print("PASS: Timer start/pause/resume/cancel/NaN guard; Music no startup connection and custom adapter registration/selection; shortcut registration/conflict/teardown/preferences; live public system readings.")
         print("Observed CPU=\(system.cpuUsage), memory=\(system.memoryUsedBytes)/\(system.memoryTotalBytes), battery=\(String(describing: system.batteryLevel)), outputVolume=\(String(describing: system.outputVolume)), network=\(system.networkBytesPerSecond)")
         system.stop()
         let before = system.cpuUsage
