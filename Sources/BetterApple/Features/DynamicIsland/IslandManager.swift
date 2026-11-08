@@ -12,6 +12,7 @@ final class IslandPanel: NSPanel {
 @MainActor
 final class IslandState: ObservableObject {
     @Published var expanded = false
+    @Published var pinned = false
     @Published var selected: ModuleID = .calculator
 }
 
@@ -20,6 +21,7 @@ final class IslandManager {
     let state = IslandState()
     private let model: AppModel
     private let registry: IslandModuleRegistry
+    private let sources: IslandActivitySources
     // A new borderless panel at .zero can report the primary display before its
     // first layout. Preserve the intended screen rather than deriving it from
     // the window's current frame, which would stack secondary-display panels.
@@ -29,9 +31,10 @@ final class IslandManager {
     private var screenObserver: NSObjectProtocol?
     private var occlusionObserver: NSObjectProtocol?
     private var configuredDefault: ModuleID?
+    private var configuredAllDisplays: Bool?
     var onVisibilityChange: (() -> Void)?
-    init(model: AppModel, registry: IslandModuleRegistry) {
-        self.model = model; self.registry = registry
+    init(model: AppModel, registry: IslandModuleRegistry, sources: IslandActivitySources) {
+        self.model = model; self.registry = registry; self.sources = sources
         state.selected = model.settings.island.defaultModule
         state.$expanded.dropFirst().sink { [weak self] _ in
             Task { @MainActor in self?.layout(animated: true); self?.onVisibilityChange?() }
@@ -59,6 +62,7 @@ final class IslandManager {
         closeTask?.cancel()
         destinations.forEach { $0.panel.orderOut(nil); $0.panel.contentView = nil; $0.panel.close() }; destinations.removeAll()
         let settings = model.settings.island
+        configuredAllDisplays = settings.allDisplays
         guard settings.enabled else { state.expanded = false; onVisibilityChange?(); return }
         if configuredDefault != settings.defaultModule || !settings.modules.contains(state.selected) {
             state.selected = settings.defaultModule
@@ -68,30 +72,58 @@ final class IslandManager {
         for screen in screens {
             let panel = IslandPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
             panel.isReleasedWhenClosed = false; panel.isOpaque = false; panel.backgroundColor = .clear
-            panel.level = .floating; panel.hasShadow = true; panel.hidesOnDeactivate = false
+            panel.level = .floating; panel.hasShadow = settings.visual.shadowVisible; panel.hidesOnDeactivate = false
             panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
             if settings.showInFullScreen { panel.collectionBehavior.insert(.fullScreenAuxiliary) }
-            panel.contentView = NSHostingView(rootView: IslandView(model: model, state: state, registry: registry, hover: { [weak self] in self?.hover($0) }, toggle: { [weak self] in self?.toggle() }))
+            panel.contentView = NSHostingView(rootView: IslandView(model: model, state: state, registry: registry, sources: sources, pin: { [weak self] in self?.togglePin() }, hover: { [weak self] in self?.hover($0) }, toggle: { [weak self] in self?.toggle() }))
             destinations.append((panel, screen))
         }
         layout(animated: false)
         destinations.forEach { $0.panel.orderFrontRegardless() }
         onVisibilityChange?()
     }
-    func toggle() { closeTask?.cancel(); state.expanded.toggle() }
-    func collapse() { closeTask?.cancel(); state.expanded = false }
+    func toggle() { closeTask?.cancel(); if state.expanded { collapse() } else { state.expanded = true } }
+    func collapse() { closeTask?.cancel(); state.pinned = false; state.expanded = false }
+    func togglePin() { closeTask?.cancel(); state.pinned.toggle(); if state.pinned { state.expanded = true } }
+
+    /// Preference edits update existing windows, preserving focus and module state.
+    func applySettings() {
+        closeTask?.cancel(); closeTask = nil
+        let settings = model.settings.island
+        guard settings.enabled, !destinations.isEmpty, configuredAllDisplays == settings.allDisplays else { rebuild(); return }
+        if configuredDefault != settings.defaultModule || !settings.modules.contains(state.selected) { state.selected = settings.defaultModule }
+        configuredDefault = settings.defaultModule
+        for (panel, _) in destinations {
+            panel.hasShadow = settings.visual.shadowVisible
+            var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary]
+            if settings.showInFullScreen { behavior.insert(.fullScreenAuxiliary) }
+            if panel.collectionBehavior != behavior { panel.collectionBehavior = behavior }
+        }
+        layout(animated: false); onVisibilityChange?()
+    }
+
+    var compactModule: ModuleID? {
+        guard model.settings.island.enabled, !state.expanded, !model.settings.island.minimal, model.settings.island.visual.compactStatus,
+              destinations.contains(where: { $0.panel.isVisible && $0.panel.occlusionState.contains(.visible) }) else { return nil }
+        return state.selected
+    }
     private func hover(_ inside: Bool) {
         closeTask?.cancel()
         closeTask = nil
         if inside {
             if model.settings.island.hoverToExpand { state.expanded = true }
-        } else if model.settings.island.autoCloseDelay > 0 {
+        } else if !state.pinned && model.settings.island.autoCloseDelay > 0 {
             let delay = model.settings.island.autoCloseDelay
             closeTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled else { return }
-                self?.state.expanded = false
-                self?.closeTask = nil
+                guard let self else { return }
+                self.closeTask = nil
+                let interacting = self.destinations.contains { entry in
+                    (entry.panel.isKeyWindow && (entry.panel.firstResponder as? NSTextView)?.isFieldEditor == true) || entry.panel.childWindows?.contains(where: \.isVisible) == true
+                }
+                guard !interacting, !self.state.pinned else { return }
+                self.state.expanded = false
             }
         }
     }
@@ -107,9 +139,10 @@ final class IslandManager {
             let x = min(available.maxX - size.width, max(available.minX, screen.frame.midX - size.width / 2 + settings.offsetX))
             let y = max(available.minY, top - size.height - settings.offsetY)
             let rect = NSRect(origin: NSPoint(x: x, y: y), size: size)
-            if animated && !reduceMotion {
+            guard panel.frame != rect else { continue }
+            if animated && !reduceMotion && settings.visual.animationDuration > 0 {
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.24; context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    context.duration = settings.visual.animationDuration; context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     panel.animator().setFrame(rect, display: true)
                 }
             } else { panel.setFrame(rect, display: true) }
@@ -120,55 +153,5 @@ final class IslandManager {
         if let observer = screenObserver { NotificationCenter.default.removeObserver(observer); screenObserver = nil }
         if let observer = occlusionObserver { NotificationCenter.default.removeObserver(observer); occlusionObserver = nil }
         observations.removeAll()
-    }
-}
-
-struct IslandView: View {
-    @ObservedObject var model: AppModel
-    @ObservedObject var state: IslandState
-    let registry: IslandModuleRegistry
-    let hover: (Bool) -> Void
-    let toggle: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        VStack(spacing: 0) {
-            if state.expanded {
-                HStack {
-                    Label("BetterApple", systemImage: "circle.lefthalf.filled").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Spacer()
-                    Button(action: toggle) { Image(systemName: "chevron.up") }.buttonStyle(.plain).help("Collapse")
-                }.padding(.bottom, 14)
-                HStack(spacing: 6) {
-                    ForEach(model.settings.island.modules) { module in
-                        Button { state.selected = module } label: {
-                            Image(systemName: module.symbol).font(.system(size: 15, weight: .medium))
-                                .frame(maxWidth: .infinity).frame(height: 30)
-                                .background(state.selected == module ? Color.white.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 8))
-                        }.buttonStyle(.plain).help(module.title).accessibilityLabel(module.title)
-                            .accessibilityAddTraits(state.selected == module ? .isSelected : [])
-                    }
-                }.padding(.bottom, 18)
-                registry.content(for: state.selected).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            } else if model.settings.island.minimal {
-                Capsule().fill(.mint).frame(width: 28, height: 3)
-            } else {
-                HStack {
-                    Image(systemName: state.selected.symbol).foregroundStyle(.mint)
-                    Spacer()
-                    Text("BetterApple").font(.system(size: 12, weight: .medium))
-                    Spacer()
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
-                }.contentShape(Rectangle()).onTapGesture(perform: toggle)
-            }
-        }
-        .padding(state.expanded ? 20 : (model.settings.island.minimal ? 2 : 13))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.97), in: RoundedRectangle(cornerRadius: state.expanded ? 26 : 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: state.expanded ? 26 : 16).strokeBorder(.white.opacity(0.1), lineWidth: 1))
-        .preferredColorScheme(.dark)
-        .onHover(perform: hover)
-        .onTapGesture { if !state.expanded { toggle() } }
-        .onExitCommand { state.expanded = false }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: state.expanded)
     }
 }

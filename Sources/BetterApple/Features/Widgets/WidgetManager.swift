@@ -2,67 +2,6 @@ import AppKit
 import SwiftUI
 import BetterAppleCore
 
-enum DesktopWidgetKind: String, Codable, CaseIterable, Identifiable {
-    case clock, analogClock, calendar, events, calculator, music, battery, system, notes, timer
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .analogClock: return "Analog Clock"
-        case .events: return "Upcoming Events"
-        case .system: return "CPU & Memory"
-        default: return rawValue.capitalized
-        }
-    }
-    var symbol: String {
-        switch self {
-        case .clock, .analogClock: return "clock"
-        case .calendar, .events: return "calendar"
-        case .calculator: return "plus.forwardslash.minus"
-        case .music: return "music.note"
-        case .battery: return "battery.100percent"
-        case .system: return "cpu"
-        case .notes: return "note.text"
-        case .timer: return "timer"
-        }
-    }
-}
-
-enum DesktopWidgetTheme: String, Codable, CaseIterable, Identifiable {
-    case automatic, light, dark
-    var id: String { rawValue }
-}
-
-enum DesktopWidgetAccent: String, Codable, CaseIterable, Identifiable {
-    case blue, purple, pink, orange, green, graphite
-    var id: String { rawValue }
-    var color: Color {
-        switch self {
-        case .blue: return .blue
-        case .purple: return .purple
-        case .pink: return .pink
-        case .orange: return .orange
-        case .green: return .green
-        case .graphite: return .gray
-        }
-    }
-}
-
-struct WidgetConfiguration: Codable, Identifiable {
-    var id = UUID()
-    var kind: DesktopWidgetKind
-    var visible = true
-    var x: Double = 80
-    var y: Double = 100
-    var width: Double = 300
-    var height: Double = 240
-    var opacity: Double = 0.95
-    var theme: DesktopWidgetTheme = .automatic
-    var shadow = true
-    var border = true
-    var note = ""
-    var accent: DesktopWidgetAccent?
-}
-
 private struct WidgetWindowState: Equatable {
     let id: UUID
     let visible: Bool
@@ -84,10 +23,16 @@ final class WidgetManager: ObservableObject {
         }
     }
     @Published var editing = false { didSet { refresh() } }
+    @Published var layoutPreferences: WidgetLayoutPreferences {
+        didSet {
+            if let data = try? JSONEncoder().encode(layoutPreferences) { defaults.set(data, forKey: "widgets.editing") }
+        }
+    }
     let calendar: CalendarService
     let music: MusicService
     let system: SystemStatusService
     let timer: TimerService
+    let calculator: CalculatorService
     private let defaults: UserDefaults
     private var panels: [UUID: NSPanel] = [:]
     private var delegates: [UUID: WidgetWindowDelegate] = [:]
@@ -107,16 +52,16 @@ final class WidgetManager: ObservableObject {
         })
     }
 
-    init(calendar: CalendarService, music: MusicService, system: SystemStatusService, timer: TimerService, defaults: UserDefaults = .standard) {
+    init(calendar: CalendarService, music: MusicService, system: SystemStatusService, timer: TimerService, calculator: CalculatorService? = nil, defaults: UserDefaults = .standard) {
         self.calendar = calendar; self.music = music; self.system = system; self.timer = timer; self.defaults = defaults
+        self.calculator = calculator ?? CalculatorService(defaults: defaults)
+        layoutPreferences = defaults.data(forKey: "widgets.editing").flatMap { try? JSONDecoder().decode(WidgetLayoutPreferences.self, from: $0).validated() } ?? WidgetLayoutPreferences()
         widgets = defaults.data(forKey: "widgets.layout").flatMap { try? JSONDecoder().decode([WidgetConfiguration].self, from: $0) } ?? []
         // Validate persisted geometry before allocating windows.
+        var ids = Set<UUID>()
         widgets = widgets.prefix(30).map { entry in
-            var value = entry
-            value.width = Self.clamp(value.width, 220...800, fallback: 300)
-            value.height = Self.clamp(value.height, 160...800, fallback: 240)
-            value.opacity = Self.clamp(value.opacity, 0.2...1, fallback: 0.95)
-            if !value.x.isFinite { value.x = 80 }; if !value.y.isFinite { value.y = 100 }
+            var value = entry.sanitized()
+            if !ids.insert(value.id).inserted { value.id = UUID(); ids.insert(value.id) }
             return value
         }
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
@@ -133,7 +78,6 @@ final class WidgetManager: ObservableObject {
             }
         }
     }
-    private static func clamp(_ value: Double, _ range: ClosedRange<Double>, fallback: Double) -> Double { value.isFinite ? min(range.upperBound, max(range.lowerBound, value)) : fallback }
     func add(kind: DesktopWidgetKind) {
         guard widgets.count < 30 else { return }
         var item = WidgetConfiguration(kind: kind)
@@ -141,6 +85,49 @@ final class WidgetManager: ObservableObject {
         widgets.append(item)
     }
     func remove(id: UUID) { widgets.removeAll { $0.id == id } }
+    func setAllVisible(_ visible: Bool) {
+        widgets = widgets.map { item in var updated = item; updated.visible = visible; return updated }
+    }
+    @discardableResult func duplicate(id: UUID) -> UUID? {
+        guard widgets.count < 30, let original = widgets.first(where: { $0.id == id }) else { return nil }
+        var copy = original
+        copy.id = UUID(); copy.x += 24; copy.y -= 24; copy.visible = true
+        let frame = constrainedFrame(NSRect(x: copy.x, y: copy.y, width: copy.width, height: copy.height))
+        copy.x = frame.minX; copy.y = frame.minY
+        widgets.append(copy)
+        return copy.id
+    }
+    func center(id: UUID) {
+        guard let item = widgets.first(where: { $0.id == id }), let screen = panels[id]?.screen ?? NSScreen.main else { return }
+        update(id) { value in value.x = screen.visibleFrame.midX - item.width / 2; value.y = screen.visibleFrame.midY - item.height / 2 }
+    }
+    func bringForward(id: UUID) { panels[id]?.orderFrontRegardless() }
+    /// Deterministic grid layout is an explicit user action, never a background rearrangement.
+    func arrangeVisible() {
+        guard let screen = NSScreen.main else { return }
+        let available = screen.visibleFrame.insetBy(dx: 24, dy: 24)
+        var x = available.minX, y = available.maxY, rowHeight = 0.0
+        var arranged = widgets
+        for index in arranged.indices where arranged[index].visible {
+            let width = arranged[index].width, height = arranged[index].height
+            if x + width > available.maxX && x > available.minX { x = available.minX; y -= rowHeight + 20; rowHeight = 0 }
+            if y - height < available.minY { y = available.maxY; x = available.minX }
+            arranged[index].x = x; arranged[index].y = y - height
+            x += width + 20; rowHeight = max(rowHeight, height)
+        }
+        widgets = arranged
+    }
+    func finishEditingFrame(id: UUID) {
+        guard editing, layoutPreferences.snapToGrid, let panel = panels[id] else { return }
+        let grid = layoutPreferences.gridSize
+        let frame = panel.frame
+        let snapped = constrainedFrame(NSRect(x: (frame.minX / grid).rounded() * grid,
+                                             y: (frame.minY / grid).rounded() * grid,
+                                             width: min(800, max(220, (frame.width / grid).rounded() * grid)),
+                                             height: min(800, max(160, (frame.height / grid).rounded() * grid))))
+        panel.setFrame(snapped, display: true)
+        persistFrame(snapped, id: id)
+    }
     func show() { suspended = false; refresh() }
     func hide() { suspended = true; refresh() }
     func refresh() {
@@ -170,6 +157,7 @@ final class WidgetManager: ObservableObject {
                 panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
                 panel.isReleasedWhenClosed = false
                 panel.minSize = NSSize(width: 220, height: 160)
+                panel.maxSize = NSSize(width: 800, height: 800)
                 let delegate = WidgetWindowDelegate(manager: self, id: item.id)
                 panel.delegate = delegate; delegates[item.id] = delegate; panels[item.id] = panel
             }
@@ -235,34 +223,5 @@ private final class WidgetWindowDelegate: NSObject, NSWindowDelegate {
     init(manager: WidgetManager, id: UUID) { self.manager = manager; self.id = id }
     func windowDidMove(_ notification: Notification) { if let window = notification.object as? NSWindow { manager?.persistFrame(window.frame, id: id) } }
     func windowDidResize(_ notification: Notification) { if let window = notification.object as? NSWindow { manager?.persistFrame(window.frame, id: id) } }
-}
-
-struct WidgetSettingsView: View {
-    @ObservedObject var manager: WidgetManager
-    var body: some View {
-        Form {
-            Section("Desktop Widgets") {
-                Toggle("Edit layout", isOn: $manager.editing)
-                Text("In edit mode, drag the widget background to move it and resize from its edges. Layouts are saved automatically.").font(.caption).foregroundStyle(.secondary)
-                Menu("Add widget") { ForEach(DesktopWidgetKind.allCases) { kind in Button(kind.title, systemImage: kind.symbol) { manager.add(kind: kind) } } }
-            }
-            ForEach(manager.widgets) { item in
-                Section(item.kind.title) {
-                    Toggle("Visible", isOn: binding(item, \.visible))
-                    Picker("Theme", selection: binding(item, \.theme)) { ForEach(DesktopWidgetTheme.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                    Picker("Accent color", selection: binding(item, \.accent)) {
-                        Text("System accent").tag(Optional<DesktopWidgetAccent>.none)
-                        ForEach(DesktopWidgetAccent.allCases) { accent in Text(accent.rawValue.capitalized).tag(Optional(accent)) }
-                    }
-                    LabeledContent("Opacity") { Slider(value: binding(item, \.opacity), in: 0.2...1).frame(width: 180) }
-                    Toggle("Border", isOn: binding(item, \.border))
-                    Toggle("Shadow", isOn: binding(item, \.shadow))
-                    Button("Remove widget", role: .destructive) { manager.remove(id: item.id) }
-                }
-            }
-        }.formStyle(.grouped)
-    }
-    private func binding<T>(_ item: WidgetConfiguration, _ keyPath: WritableKeyPath<WidgetConfiguration, T>) -> Binding<T> {
-        Binding(get: { (manager.widgets.first { $0.id == item.id } ?? item)[keyPath: keyPath] }, set: { value in manager.update(item.id) { $0[keyPath: keyPath] = value } })
-    }
+    func windowDidEndLiveResize(_ notification: Notification) { manager?.finishEditingFrame(id: id) }
 }

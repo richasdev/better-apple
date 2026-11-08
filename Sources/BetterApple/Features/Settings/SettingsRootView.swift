@@ -34,7 +34,7 @@ struct SettingsRootView: View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
-                    Image(systemName: "circle.lefthalf.filled").font(.system(size: 28)).foregroundStyle(.mint)
+                    Image(systemName: "circle.lefthalf.filled").font(.system(size: 28)).foregroundStyle(model.settings.island.visual.accent.color)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("BetterApple").font(.headline)
                         Text("Make room for better.").font(.caption).foregroundStyle(.secondary)
@@ -51,7 +51,7 @@ struct SettingsRootView: View {
                     Text(error).font(.caption).foregroundStyle(.red).padding()
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }.tint(.mint)
+        }.tint(model.settings.island.visual.accent.color)
     }
     @ViewBuilder private var content: some View {
         switch selection ?? .general {
@@ -81,57 +81,10 @@ struct SettingsRootView: View {
                     Text("Includes Island, Dock, widget layouts and notes. Keep exported files private if your notes contain personal information.").font(.caption).foregroundStyle(.secondary)
                 }
             }.formStyle(.grouped)
-        case .island:
-            Form {
-                Section("Behavior") {
-                    Toggle("Enable Dynamic Island", isOn: $model.settings.island.enabled)
-                    Toggle("Expand on hover", isOn: $model.settings.island.hoverToExpand)
-                    Toggle("Minimal appearance", isOn: $model.settings.island.minimal)
-                    Toggle("Show on every display", isOn: $model.settings.island.allDisplays)
-                    Toggle("Allow over full-screen apps", isOn: $model.settings.island.showInFullScreen)
-                    slider("Close delay (0 keeps open)", value: $model.settings.island.autoCloseDelay, range: 0...10, unit: "s")
-                }
-                Section("Geometry") {
-                    slider("Compact width", value: $model.settings.island.width, range: 140...500)
-                    slider("Compact height", value: $model.settings.island.height, range: 24...64)
-                    slider("Expanded width", value: $model.settings.island.expandedWidth, range: 340...650)
-                    slider("Expanded height", value: $model.settings.island.expandedHeight, range: 240...500)
-                    slider("Horizontal offset", value: $model.settings.island.offsetX, range: -500...500)
-                    slider("Distance below menu bar", value: $model.settings.island.offsetY, range: 0...200)
-                }
-                Section("Modules · use arrows to reorder") {
-                    ForEach(ModuleID.allCases) { module in
-                        Toggle(module.title, isOn: Binding(get: { model.settings.island.modules.contains(module) }, set: { enabled in
-                            if enabled { model.settings.island.modules.append(module) }
-                            else if model.settings.island.modules.count > 1 { model.settings.island.modules.removeAll { $0 == module } }
-                            if !model.settings.island.modules.contains(model.settings.island.defaultModule) { model.settings.island.defaultModule = model.settings.island.modules[0] }
-                        }))
-                    }
-                    ForEach(Array(model.settings.island.modules.enumerated()), id: \.element) { index, module in
-                        HStack {
-                            Label(module.title, systemImage: module.symbol); Spacer()
-                            Button { model.settings.island.modules.swapAt(index, index - 1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0).help("Move up")
-                            Button { model.settings.island.modules.swapAt(index, index + 1) } label: { Image(systemName: "arrow.down") }.disabled(index == model.settings.island.modules.count - 1).help("Move down")
-                        }
-                    }
-                    Picker("Default module", selection: $model.settings.island.defaultModule) { ForEach(model.settings.island.modules) { Text($0.title).tag($0) } }
-                }
-            }.formStyle(.grouped)
+        case .island: IslandSettingsView(model: model)
         case .dock: DockSettingsView(manager: dock)
         case .widgets: WidgetSettingsView(manager: widgets)
-        case .appearance:
-            Form {
-                Section("Workspace presets") {
-                    ForEach(AppearancePreset.allCases) { preset in
-                        HStack {
-                            Text(preset.title); Spacer()
-                            if model.settings.appearance == preset { Image(systemName: "checkmark.circle.fill").foregroundStyle(.mint) }
-                            Button("Apply") { coordinator.applyPreset(preset) }
-                        }
-                    }
-                }
-                Text("Widgets follow their individual theme. The Island uses a dark surface for contrast near the camera; settings follow macOS appearance.").font(.callout).foregroundStyle(.secondary)
-            }.formStyle(.grouped)
+        case .appearance: WorkspaceAppearanceView(model: model, coordinator: coordinator)
         case .shortcuts:
             ShortcutSettingsView(service: coordinator.shortcuts)
         case .performance:
@@ -170,9 +123,9 @@ struct SettingsRootView: View {
         case .about:
             Form {
                 Section {
-                    Image(systemName: "circle.lefthalf.filled").font(.system(size: 46)).foregroundStyle(.mint)
+                    Image(systemName: "circle.lefthalf.filled").font(.system(size: 46)).foregroundStyle(model.settings.island.visual.accent.color)
                     Text("BetterApple").font(.largeTitle.bold())
-                    Text("0.1.0 · Native macOS workspace tools").foregroundStyle(.secondary)
+                    Text("\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development") · Native macOS workspace tools").foregroundStyle(.secondary)
                     Text("Built with SwiftUI, AppKit and public system APIs. No external runtime dependencies.")
                 }
                 Section("Development status") {

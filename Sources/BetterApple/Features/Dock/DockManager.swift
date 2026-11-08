@@ -1,22 +1,7 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
-
-enum DockPosition: String, Codable, CaseIterable, Identifiable {
-    case bottom, left, right
-    var id: String { rawValue }
-}
-
-struct DockPreferences: Codable, Equatable {
-    var enabled = false
-    var iconSize: Double = 48
-    var spacing: Double = 10
-    var opacity: Double = 0.9
-    var position: DockPosition = .bottom
-    var autoHide = false
-    var screenID: String = ""
-    var applicationPaths: [String] = ["/System/Library/CoreServices/Finder.app", "/Applications/Safari.app", "/System/Applications/Music.app"]
-}
+import BetterAppleCore
 
 struct DockApplication: Identifiable {
     let url: URL
@@ -30,217 +15,187 @@ struct DockApplication: Identifiable {
 final class DockManager: ObservableObject {
     @Published var preferences: DockPreferences { didSet { save(); refresh() } }
     @Published private(set) var applications: [DockApplication] = []
-    @Published var hovering = false
+    @Published private(set) var hoveringScreens: Set<String> = []
+    @Published private(set) var errorMessage: String?
     private let defaults: UserDefaults
-    private var panel: NSPanel?
+    private var destinations: [String: (panel: NSPanel, screen: NSScreen)] = [:]
     private var observers: [NSObjectProtocol] = []
-    private var screenObserver: NSObjectProtocol?
-    private var hideWork: DispatchWorkItem?
+    private var applicationObservers: [NSObjectProtocol] = []
+    private var hideWork: [String: DispatchWorkItem] = [:]
     private var iconCache: [String: NSImage] = [:]
+    private var menuTracking = false
+    var hovering: Bool { !hoveringScreens.isEmpty }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: "dock.preferences"), let saved = try? JSONDecoder().decode(DockPreferences.self, from: data) {
+        if let data = defaults.data(forKey: "dock.preferences"), let saved = try? JSONDecoder().decode(DockPreferences.self, from: data).validated() {
             preferences = saved
         } else {
             var initial = DockPreferences()
             initial.applicationPaths = ["com.apple.finder", "com.apple.Safari", "com.apple.Music"].compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)?.path }
             preferences = initial
         }
-        preferences.iconSize = preferences.iconSize.isFinite ? min(80, max(24, preferences.iconSize)) : 48
-        preferences.spacing = preferences.spacing.isFinite ? min(24, max(0, preferences.spacing)) : 10
-        preferences.opacity = preferences.opacity.isFinite ? min(1, max(0.2, preferences.opacity)) : 0.9
-        preferences.applicationPaths = Array(NSOrderedSet(array: preferences.applicationPaths).array.compactMap { $0 as? String }.prefix(50))
         preferences.applicationPaths = preferences.applicationPaths.map { path in
             if path == "/System/Applications/Finder.app" { return NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder")?.path ?? path }
             if path == "/System/Applications/Safari.app" { return NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Safari")?.path ?? path }
             return path
         }
-        let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
-            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.reloadApplications() }
+            applicationObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.reloadApplications(); self?.positionWindows(animated: false) }
             })
         }
-        screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
-        }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.menuTracking = true }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.menuTracking = false
+                for (id, destination) in self.destinations { self.hover(destination.panel.frame.contains(NSEvent.mouseLocation), screenID: id) }
+            }
+        })
         reloadApplications()
     }
 
     func show() { preferences.enabled = true }
     func hide() { preferences.enabled = false }
+    func applyPreset(_ preset: AppearancePreset) {
+        guard preset != .custom else { return }
+        var next = preferences
+        next.theme = .system; next.material = .glass; next.accent = .system
+        next.iconSize = 48; next.spacing = 10; next.opacity = 0.9; next.cornerRadius = 22
+        next.magnification = 1.16; next.animationDuration = 0.16; next.showLabels = false
+        switch preset {
+        case .minimal: next.iconSize = 36; next.spacing = 6; next.opacity = 0.85; next.magnification = 1; next.cornerRadius = 14
+        case .glass: next.opacity = 0.65; next.cornerRadius = 28; next.magnification = 1.25
+        case .compact: next.iconSize = 36; next.spacing = 6; next.cornerRadius = 16; next.magnification = 1.1
+        case .default, .custom: break
+        }
+        preferences = next
+    }
     func refresh() {
-        guard preferences.enabled else {
-            hideWork?.cancel(); panel?.orderOut(nil); panel?.contentView = nil; panel?.close(); panel = nil
-            return
-        }
+        guard preferences.enabled else { closePanels(); return }
         reloadApplications()
-        if panel == nil {
-            let window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.hasShadow = true
-            window.level = .floating
-            window.collectionBehavior = [.canJoinAllSpaces, .stationary]
-            window.isReleasedWhenClosed = false
-            panel = window
-            window.contentView = NSHostingView(rootView: DockSurface(manager: self))
+        let screens = preferences.allDisplays ? NSScreen.screens : [NSScreen.screens.first(where: { Self.screenID($0) == preferences.screenID }) ?? NSScreen.main].compactMap { $0 }
+        let wanted = Set(screens.map(Self.screenID))
+        for id in Array(destinations.keys) where !wanted.contains(id) { closePanel(id) }
+        for screen in screens {
+            let id = Self.screenID(screen)
+            if destinations[id] == nil {
+                let window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
+                window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = true
+                window.level = .floating; window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+                window.hidesOnDeactivate = false; window.isReleasedWhenClosed = false
+                window.contentView = NSHostingView(rootView: DockSurface(manager: self, screenID: id))
+                destinations[id] = (window, screen)
+            } else if let panel = destinations[id]?.panel { destinations[id] = (panel, screen) }
         }
-        positionWindow()
-        panel?.orderFrontRegardless()
+        positionWindows(animated: false)
+        destinations.values.forEach { if !$0.panel.isVisible { $0.panel.orderFrontRegardless() } }
     }
-
+    private func closePanel(_ id: String) {
+        hideWork.removeValue(forKey: id)?.cancel(); hoveringScreens.remove(id)
+        guard let destination = destinations.removeValue(forKey: id) else { return }
+        destination.panel.orderOut(nil); destination.panel.contentView = nil; destination.panel.close()
+    }
+    private func closePanels() { Array(destinations.keys).forEach(closePanel) }
     private func save() {
-        if let data = try? JSONEncoder().encode(preferences) { defaults.set(data, forKey: "dock.preferences") }
+        if let valid = try? preferences.validated(), let data = try? JSONEncoder().encode(valid) { defaults.set(data, forKey: "dock.preferences") }
     }
-
     private func reloadApplications() {
-        let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.standardizedFileURL.path })
-        applications = preferences.applicationPaths.compactMap { path in
-            let url = URL(fileURLWithPath: path)
+        let regularApps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular && !$0.isTerminated }
+        let runningPaths = Set(NSWorkspace.shared.runningApplications.filter { !$0.isTerminated }.compactMap { $0.bundleURL?.standardizedFileURL.path })
+        var paths = preferences.applicationPaths
+        if preferences.showRunningApplications {
+            let pinned = Set(paths)
+            paths += regularApps.compactMap { $0.bundleURL?.path }.filter { !pinned.contains($0) }.sorted {
+                FileManager.default.displayName(atPath: $0).localizedStandardCompare(FileManager.default.displayName(atPath: $1)) == .orderedAscending
+            }
+        }
+        var seen = Set<String>()
+        applications = paths.filter { seen.insert($0).inserted }.compactMap { path in
             guard FileManager.default.fileExists(atPath: path) else { return nil }
-            let icon = iconCache[path] ?? NSWorkspace.shared.icon(forFile: path)
-            iconCache[path] = icon
-            return DockApplication(url: url, name: FileManager.default.displayName(atPath: path).replacingOccurrences(of: ".app", with: ""), icon: icon, running: running.contains(url.standardizedFileURL.path))
+            let icon = iconCache[path] ?? NSWorkspace.shared.icon(forFile: path); iconCache[path] = icon
+            return DockApplication(url: URL(fileURLWithPath: path), name: FileManager.default.displayName(atPath: path).replacingOccurrences(of: ".app", with: ""), icon: icon, running: runningPaths.contains(URL(fileURLWithPath: path).standardizedFileURL.path))
+        }
+        let livePaths = Set(applications.map(\.id)); iconCache = iconCache.filter { livePaths.contains($0.key) }
+    }
+    private func positionWindows(animated: Bool) {
+        let settings = (try? preferences.validated()) ?? DockPreferences()
+        for (id, destination) in destinations {
+            let frame = destination.screen.visibleFrame
+            let vertical = settings.position != .bottom
+            let labelHeight: Double = settings.showLabels ? 17 : 0
+            let count = Double(max(1, applications.count))
+            let itemLength = settings.iconSize + (vertical ? labelHeight + 7 : 0)
+            let length = min((itemLength + settings.spacing) * count + 36, max(40, (vertical ? frame.height : frame.width) - 24))
+            let thickness = settings.autoHide && !hoveringScreens.contains(id) ? 10 : settings.iconSize * settings.magnification + 34 + (vertical ? 0 : labelHeight)
+            let rect: NSRect
+            switch settings.position {
+            case .bottom: rect = NSRect(x: frame.midX - length / 2, y: frame.minY + 8, width: length, height: min(thickness, frame.height))
+            case .left: rect = NSRect(x: frame.minX + 8, y: frame.midY - length / 2, width: min(thickness, frame.width), height: length)
+            case .right: rect = NSRect(x: frame.maxX - min(thickness, frame.width) - 8, y: frame.midY - length / 2, width: min(thickness, frame.width), height: length)
+            }
+            if animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, settings.animationDuration > 0 {
+                NSAnimationContext.runAnimationGroup { context in context.duration = settings.animationDuration; destination.panel.animator().setFrame(rect, display: true) }
+            } else { destination.panel.setFrame(rect, display: true) }
         }
     }
-
-    private func positionWindow() {
-        guard let panel, let screen = NSScreen.screens.first(where: { Self.screenID($0) == preferences.screenID }) ?? NSScreen.main else { return }
-        let frame = screen.visibleFrame
-        let size = min(80, max(24, preferences.iconSize))
-        let spacing = min(24, max(0, preferences.spacing))
-        let count = Double(max(1, applications.count))
-        let length = min((size + spacing) * count + 30, preferences.position == .bottom ? frame.width - 24 : frame.height - 24)
-        let thickness = preferences.autoHide && !hovering ? 10 : size + 42
-        let rect: NSRect
-        switch preferences.position {
-        case .bottom: rect = NSRect(x: frame.midX - length / 2, y: frame.minY + 8, width: length, height: thickness)
-        case .left: rect = NSRect(x: frame.minX + 8, y: frame.midY - length / 2, width: thickness, height: length)
-        case .right: rect = NSRect(x: frame.maxX - thickness - 8, y: frame.midY - length / 2, width: thickness, height: length)
-        }
-        panel.setFrame(rect, display: true)
-    }
-
-    func hover(_ entered: Bool) {
-        hideWork?.cancel()
+    func hover(_ entered: Bool, screenID: String) {
+        hideWork.removeValue(forKey: screenID)?.cancel()
         if entered {
-            hovering = true; positionWindow()
+            if hoveringScreens.insert(screenID).inserted { positionWindows(animated: true) }
         } else {
             let work = DispatchWorkItem { [weak self] in
-                guard let self else { return }
-                self.hovering = false; self.positionWindow()
+                guard let self, !self.menuTracking else { return }
+                if self.hoveringScreens.remove(screenID) != nil { self.positionWindows(animated: true) }
             }
-            hideWork = work
+            hideWork[screenID] = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
         }
     }
-
     func launch(_ app: DockApplication) {
-        NSWorkspace.shared.openApplication(at: app.url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-            if let error { NSLog("BetterApple Dock: %@", error.localizedDescription) }
+        errorMessage = nil
+        NSWorkspace.shared.openApplication(at: app.url, configuration: .init()) { [weak self] _, error in
+            if let error { Task { @MainActor in self?.errorMessage = error.localizedDescription } }
         }
     }
-
+    func reveal(_ app: DockApplication) { NSWorkspace.shared.activateFileViewerSelecting([app.url]) }
+    func canQuit(_ app: DockApplication) -> Bool { app.running && Bundle(url: app.url)?.bundleIdentifier != "com.apple.finder" }
+    func quit(_ app: DockApplication) {
+        guard canQuit(app) else { return }
+        errorMessage = nil
+        let matches = NSWorkspace.shared.runningApplications.filter { $0.bundleURL?.standardizedFileURL == app.url.standardizedFileURL }
+        let accepted = matches.map { $0.terminate() }
+        if accepted.contains(false) { errorMessage = "\(app.name) did not accept the quit request. Finish any dialogs or quit it from its menu." }
+    }
     func chooseApplications() {
-        let picker = NSOpenPanel()
-        picker.allowedContentTypes = [.applicationBundle]
-        picker.allowsMultipleSelection = true
+        let picker = NSOpenPanel(); picker.allowedContentTypes = [.applicationBundle]; picker.allowsMultipleSelection = true
         picker.directoryURL = URL(fileURLWithPath: "/Applications")
         guard picker.runModal() == .OK else { return }
-        for url in picker.urls where !preferences.applicationPaths.contains(url.path) { preferences.applicationPaths.append(url.path) }
+        var paths = preferences.applicationPaths
+        for url in picker.urls where !paths.contains(url.path) && paths.count < 100 { paths.append(url.path) }
+        preferences.applicationPaths = paths
+    }
+    func pin(_ app: DockApplication) {
+        guard preferences.applicationPaths.count < 100, !preferences.applicationPaths.contains(app.id) else { return }
+        preferences.applicationPaths.append(app.id)
     }
     func remove(id: String) { preferences.applicationPaths.removeAll { $0 == id } }
     func move(from source: String, to destination: String) {
         guard source != destination, let from = preferences.applicationPaths.firstIndex(of: source), let to = preferences.applicationPaths.firstIndex(of: destination) else { return }
-        var paths = preferences.applicationPaths
-        let path = paths.remove(at: from)
-        paths.insert(path, at: min(to, paths.count))
-        preferences.applicationPaths = paths
+        var paths = preferences.applicationPaths; let path = paths.remove(at: from); paths.insert(path, at: min(to, paths.count)); preferences.applicationPaths = paths
     }
     static func screenID(_ screen: NSScreen) -> String {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.stringValue ?? ""
     }
-
     deinit {
-        for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
-        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
-        hideWork?.cancel()
-    }
-}
-
-private struct DockSurface: View {
-    @ObservedObject var manager: DockManager
-    @State private var hovered: String?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private var vertical: Bool { manager.preferences.position != .bottom }
-    var body: some View {
-        Group {
-            if manager.preferences.autoHide && !manager.hovering {
-                Capsule().fill(.ultraThinMaterial).overlay(Capsule().stroke(.white.opacity(0.18)))
-            } else {
-                let layout = vertical ? AnyLayout(VStackLayout(spacing: manager.preferences.spacing)) : AnyLayout(HStackLayout(spacing: manager.preferences.spacing))
-                ScrollView(vertical ? .vertical : .horizontal, showsIndicators: false) {
-                  layout {
-                    ForEach(manager.applications) { app in
-                        VStack(spacing: 3) {
-                            Button { manager.launch(app) } label: {
-                                Image(nsImage: app.icon).resizable().scaledToFit()
-                                    .frame(width: manager.preferences.iconSize, height: manager.preferences.iconSize)
-                                    .scaleEffect(hovered == app.id ? 1.16 : 1)
-                            }
-                            .buttonStyle(.plain).help(app.name).accessibilityLabel("Open \(app.name)")
-                            .onHover { hovered = $0 ? app.id : nil }
-                            .contextMenu { Button("Remove from BetterApple Dock", role: .destructive) { manager.remove(id: app.id) } }
-                            .draggable(app.id)
-                            .dropDestination(for: String.self) { items, _ in
-                                guard let source = items.first, manager.preferences.applicationPaths.contains(source) else { return false }
-                                manager.move(from: source, to: app.id); return true
-                            }
-                            Circle().fill(app.running ? Color.primary : .clear).frame(width: 4, height: 4)
-                        }
-                    }
-                    if manager.applications.isEmpty {
-                        Button { manager.chooseApplications() } label: { Image(systemName: "plus.app").font(.title) }.buttonStyle(.plain).help("Add applications")
-                    }
-                  }.padding(14)
-                }
-                .background(.ultraThinMaterial.opacity(manager.preferences.opacity), in: RoundedRectangle(cornerRadius: 22))
-                .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.16)))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onHover { manager.hover($0) }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: hovered)
-    }
-}
-
-struct DockSettingsView: View {
-    @ObservedObject var manager: DockManager
-    var body: some View {
-        Form {
-            Section("Independent Dock") {
-                Toggle("Enable BetterApple Dock", isOn: $manager.preferences.enabled)
-                Picker("Position", selection: $manager.preferences.position) { ForEach(DockPosition.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                Picker("Display", selection: $manager.preferences.screenID) {
-                    Text("Main display").tag("")
-                    ForEach(NSScreen.screens, id: \.self) { screen in Text(screen.localizedName).tag(DockManager.screenID(screen)) }
-                }
-                LabeledContent("Icon size") { Slider(value: $manager.preferences.iconSize, in: 24...80, step: 2).frame(width: 180) }
-                LabeledContent("Spacing") { Slider(value: $manager.preferences.spacing, in: 0...24, step: 1).frame(width: 180) }
-                LabeledContent("Material opacity") { Slider(value: $manager.preferences.opacity, in: 0.2...1).frame(width: 180) }
-                Toggle("Automatically hide", isOn: $manager.preferences.autoHide)
-            }
-            Section("Applications") {
-                ForEach(manager.applications) { app in
-                    HStack { Image(nsImage: app.icon).resizable().frame(width: 24, height: 24); Text(app.name); Spacer(); Button("Remove") { manager.remove(id: app.id) } }
-                }
-                Button("Add applications…") { manager.chooseApplications() }
-                Text("Drag icons onto another icon to reorder. The macOS Dock remains independent.").font(.caption).foregroundStyle(.secondary)
-                Button("Open macOS Dock settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!) }
-            }
-        }.formStyle(.grouped)
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        applicationObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        hideWork.values.forEach { $0.cancel() }
     }
 }

@@ -9,22 +9,26 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
     let calendar = CalendarService()
     let music = MusicService()
     let system = SystemStatusService()
-    let timer = TimerService()
+    let timer: TimerService
+    let calculator: CalculatorService
     let dock: DockManager
     let shortcuts: GlobalShortcutService
     let registry = IslandModuleRegistry()
     private let defaults: UserDefaults
-    lazy var widgets = WidgetManager(calendar: calendar, music: music, system: system, timer: timer, defaults: defaults)
-    lazy var island = IslandManager(model: model, registry: registry)
+    lazy var widgets = WidgetManager(calendar: calendar, music: music, system: system, timer: timer, calculator: calculator, defaults: defaults)
+    lazy var island = IslandManager(model: model, registry: registry, sources: IslandActivitySources(timer: timer, music: music, system: system, calendar: calendar, calculator: calculator))
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var subscriptions: Set<AnyCancellable> = []
     private var observers: [NSObjectProtocol] = []
     private var sleeping = false
+    private var applyingPreferences = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         model = AppModel(defaults: defaults)
+        timer = TimerService(defaults: defaults)
+        calculator = CalculatorService(defaults: defaults)
         dock = DockManager(defaults: defaults)
         shortcuts = GlobalShortcutService(defaults: defaults)
         super.init()
@@ -32,7 +36,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
 
     func start() {
         shortcuts.onTrigger = { [weak self] in self?.island.toggle() }
-        registry.register(NativeIslandModule(id: .calculator) { AnyView(CalculatorModuleView()) })
+        registry.register(NativeIslandModule(id: .calculator) { [calculator] in AnyView(CalculatorModuleView(calculator: calculator)) })
         registry.register(NativeIslandModule(id: .calendar) { [calendar] in AnyView(CalendarModuleView(calendar: calendar)) })
         registry.register(NativeIslandModule(id: .music) { [music] in AnyView(MusicModuleView(music: music)) })
         registry.register(NativeIslandModule(id: .system) { [system] in AnyView(SystemModuleView(system: system)) })
@@ -40,7 +44,11 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         island.onVisibilityChange = { [weak self] in self?.updateServiceDemand() }
         widgets.onVisibilityChange = { [weak self] in self?.updateServiceDemand() }
         model.$settings.dropFirst().debounce(for: .milliseconds(120), scheduler: RunLoop.main).sink { [weak self] _ in
-            self?.island.rebuild(); self?.updateServiceDemand()
+            self?.island.applySettings(); self?.updateServiceDemand()
+        }.store(in: &subscriptions)
+        dock.$preferences.dropFirst().sink { [weak self] _ in
+            guard let self, !self.applyingPreferences, self.model.settings.appearance != .custom else { return }
+            self.model.settings.appearance = .custom
         }.store(in: &subscriptions)
         widgets.$widgets.dropFirst().sink { [weak self] _ in
             Task { @MainActor in self?.updateServiceDemand() }
@@ -93,7 +101,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         window.contentView = nil; settingsWindow = nil
     }
     private func updateServiceDemand() {
-        let active = sleeping ? nil : island.activeModule
+        let active = sleeping ? nil : (island.activeModule ?? island.compactModule)
         let kinds = sleeping ? Set<DesktopWidgetKind>() : widgets.activeKinds
         if active == .calendar || kinds.contains(.events) { calendar.start() } else { calendar.stop() }
         if active == .music || kinds.contains(.music) { music.start() } else { music.stop() }
@@ -115,11 +123,17 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         var dock: DockPreferences
         var widgets: [WidgetConfiguration]
         var shortcut: ShortcutConfiguration?
+        var widgetLayout: WidgetLayoutPreferences?
+        var timer: TimerPreferences?
+        var calculator: CalculatorConfiguration?
     }
     private struct ShortcutConfiguration: Codable {
         var enabled: Bool
         var key: String
         var modifiers: String
+    }
+    private struct CalculatorConfiguration: Codable {
+        var historyEnabled: Bool
     }
     func exportConfiguration() {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "BetterApple.json"
@@ -132,7 +146,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         guard widgets.widgets.allSatisfy({ $0.note.count <= 100000 }) else { throw SettingsError.tooLarge }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let shortcut = ShortcutConfiguration(enabled: shortcuts.enabled, key: shortcuts.key.rawValue, modifiers: shortcuts.modifiers.rawValue)
-        let data = try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut))
+        let data = try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut, widgetLayout: widgets.layoutPreferences, timer: timer.preferences, calculator: CalculatorConfiguration(historyEnabled: calculator.historyEnabled)))
         guard data.count <= 2 * 1024 * 1024 else { throw SettingsError.tooLarge }
         return data
     }
@@ -153,15 +167,22 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
             guard GlobalShortcutService.Key(rawValue: shortcut.key) != nil,
                   GlobalShortcutService.Modifiers(rawValue: shortcut.modifiers) != nil else { throw CocoaError(.coderInvalidValue) }
         }
-        guard suite.widgets.count <= 30, suite.dock.applicationPaths.count <= 100,
-              suite.dock.iconSize.isFinite, suite.dock.spacing.isFinite, suite.dock.opacity.isFinite,
-              (24...80).contains(suite.dock.iconSize), (0...24).contains(suite.dock.spacing), (0.2...1).contains(suite.dock.opacity),
-              suite.dock.applicationPaths.allSatisfy({ $0.hasPrefix("/") && $0.hasSuffix(".app") }),
-              Set(suite.widgets.map(\.id)).count == suite.widgets.count,
-              suite.widgets.allSatisfy({ $0.x.isFinite && $0.y.isFinite && (220...800).contains($0.width) && (160...800).contains($0.height) && (0.2...1).contains($0.opacity) && $0.note.count <= 100000 }) else {
+        guard suite.widgets.count <= 30, Set(suite.widgets.map(\.id)).count == suite.widgets.count else {
             throw CocoaError(.coderInvalidValue)
         }
-        model.settings = settings; dock.preferences = suite.dock; widgets.widgets = suite.widgets
+        let dockPreferences = try suite.dock.validated()
+        let widgetConfigurations = try suite.widgets.map { try $0.validated() }
+        let layout = try suite.widgetLayout?.validated()
+        if let preferences = suite.timer {
+            guard preferences.label.count <= 80, !preferences.presetMinutes.isEmpty, preferences.presetMinutes.count <= 8,
+                  preferences.presetMinutes.allSatisfy({ (1...1440).contains($0) }) else { throw CocoaError(.coderInvalidValue) }
+        }
+        applyingPreferences = true
+        defer { applyingPreferences = false }
+        model.replaceSettings(settings); dock.preferences = dockPreferences; widgets.widgets = widgetConfigurations
+        if let layout { widgets.layoutPreferences = layout }
+        if let preferences = suite.timer { timer.preferences = preferences.normalized() }
+        if let preferences = suite.calculator { calculator.historyEnabled = preferences.historyEnabled }
         if let shortcut = suite.shortcut {
             shortcuts.enabled = false
             shortcuts.key = GlobalShortcutService.Key(rawValue: shortcut.key)!
@@ -170,9 +191,9 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         }
     }
     func applyPreset(_ preset: AppearancePreset) {
-        model.settings.applyPreset(preset)
-        dock.preferences.iconSize = model.settings.dock.iconSize
-        dock.preferences.spacing = model.settings.dock.spacing
-        dock.preferences.opacity = model.settings.dock.opacity
+        applyingPreferences = true
+        defer { applyingPreferences = false }
+        model.applyPreset(preset)
+        dock.applyPreset(preset)
     }
 }
