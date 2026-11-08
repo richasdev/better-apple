@@ -9,59 +9,77 @@ final class IslandPlacementTests: XCTestCase {
               auxiliaryLeft: CGRect(x: 0, y: 945, width: 676, height: 37),
               auxiliaryRight: CGRect(x: 836, y: 945, width: 676, height: 37))
     }
-    func testCollapsedCutoutIsFlushAndOnlyExposesThinHoverRim() {
+    func testPhysicalNotchCollapsedSilhouetteAttachesToTopWithShoulders() {
         let layout = CameraIslandGeometry.layout(screen: notched, expanded: false, expandedWidth: 420, expandedHeight: 320)
         XCTAssertTrue(layout.hasNotch)
         XCTAssertEqual(layout.cameraWidth, 160)
         XCTAssertEqual(layout.cameraHeight, 37)
-        XCTAssertEqual(layout.frame, CGRect(x: 672, y: 941, width: 168, height: 41))
-        XCTAssertEqual(layout.frame.maxY, screen.maxY)
-        XCTAssertEqual(layout.frame.midX, screen.midX)
-        XCTAssertEqual(layout.frame.height - layout.cameraHeight, 4)
-        XCTAssertEqual(layout.topInset, 0)
-        XCTAssertEqual(layout.bodyFrame, CGRect(x: 672, y: 941, width: 168, height: 4))
-        XCTAssertEqual(layout.capFrame, CGRect(x: 676, y: 941, width: 160, height: 41))
-    }
-    func testExpansionKeepsCameraAnchorAndControlsBelowSensor() {
-        let layout = CameraIslandGeometry.layout(screen: notched, expanded: true, expandedWidth: 420, expandedHeight: 320)
-        XCTAssertEqual(layout.frame.maxY, screen.maxY)
-        XCTAssertEqual(layout.frame.midX, screen.midX)
-        XCTAssertEqual(layout.frame.size, CGSize(width: 420, height: 357))
         XCTAssertEqual(layout.topInset, 37)
-        XCTAssertEqual(layout.frame.maxY - layout.topInset, 945)
-        XCTAssertEqual(layout.frame.height - layout.topInset, 320)
-        XCTAssertEqual(layout.bodyFrame, CGRect(x: 546, y: 625, width: 420, height: 320))
-        XCTAssertEqual(layout.bodyFrame.maxY, screen.maxY - layout.cameraHeight)
-        XCTAssertEqual(layout.capFrame, CGRect(x: 676, y: 941, width: 160, height: 41))
-        XCTAssertLessThan(layout.capFrame!.width, layout.bodyFrame.width)
-        let narrow = CameraIslandGeometry.layout(screen: notched, expanded: true, expandedWidth: 100, expandedHeight: 200)
-        XCTAssertEqual(narrow.frame.width, 192)
+        XCTAssertEqual(layout.bodyFrame, CGRect(x: 676, y: 941, width: 160, height: 4))
+        XCTAssertEqual(layout.capFrame, CGRect(x: 664, y: 941, width: 184, height: 41))
+        XCTAssertEqual(layout.frame, CGRect(x: 664, y: 941, width: 184, height: 41))
+        assertContinuous(layout)
     }
-    func testNoNotchUsesSubtlePillBelowMenuWithStableExpansionAnchor() {
+    func testExpansionWidensCapWithBodyAndKeepsTopAnchorFixed() {
+        let closed = CameraIslandGeometry.layout(screen: notched, expanded: false, expandedWidth: 420, expandedHeight: 320)
+        let opened = CameraIslandGeometry.layout(screen: notched, expanded: true, expandedWidth: 420, expandedHeight: 320)
+        XCTAssertEqual(opened.bodyFrame, CGRect(x: 546, y: 625, width: 420, height: 320))
+        XCTAssertEqual(opened.capFrame, CGRect(x: 534, y: 941, width: 444, height: 41))
+        XCTAssertEqual(opened.frame, CGRect(x: 534, y: 625, width: 444, height: 357))
+        XCTAssertEqual(opened.capFrame?.maxY, closed.capFrame?.maxY)
+        XCTAssertEqual(opened.capFrame?.height, closed.capFrame?.height)
+        XCTAssertGreaterThan(opened.capFrame!.width, closed.capFrame!.width)
+        assertContinuous(opened)
+        let narrow = CameraIslandGeometry.layout(screen: notched, expanded: true, expandedWidth: 100, expandedHeight: 200)
+        XCTAssertEqual(narrow.bodyFrame.width, 192)
+        XCTAssertEqual(narrow.capFrame?.width, 216)
+    }
+    func testRegularDisplayGetsSyntheticTopAttachedNotchInsteadOfPill() {
         let metrics = CameraScreenMetrics(screenFrame: screen, visibleFrame: CGRect(x: 0, y: 48, width: 1512, height: 910))
         let closed = CameraIslandGeometry.layout(screen: metrics, expanded: false, expandedWidth: 420, expandedHeight: 320)
         let opened = CameraIslandGeometry.layout(screen: metrics, expanded: true, expandedWidth: 420, expandedHeight: 320)
         XCTAssertFalse(closed.hasNotch)
-        XCTAssertEqual(closed.frame.size, CGSize(width: 80, height: 8))
-        XCTAssertEqual(closed.frame.maxY, 956)
-        XCTAssertEqual(opened.frame.maxY, closed.frame.maxY)
-        XCTAssertEqual(closed.frame.midX, screen.midX)
-        XCTAssertEqual(opened.topInset, 0)
-        XCTAssertEqual(opened.bodyFrame, opened.frame)
-        XCTAssertNil(opened.capFrame)
+        XCTAssertEqual(closed.cameraWidth, 185)
+        XCTAssertEqual(closed.cameraHeight, 32)
+        XCTAssertEqual(closed.topInset, 32)
+        XCTAssertEqual(closed.bodyFrame, CGRect(x: 663.5, y: 946, width: 185, height: 4))
+        XCTAssertEqual(closed.capFrame, CGRect(x: 651.5, y: 946, width: 209, height: 36))
+        XCTAssertEqual(opened.bodyFrame, CGRect(x: 546, y: 630, width: 420, height: 320))
+        XCTAssertEqual(opened.capFrame, CGRect(x: 534, y: 946, width: 444, height: 36))
+        XCTAssertEqual(closed.frame.maxY, screen.maxY)
+        XCTAssertEqual(opened.frame.maxY, screen.maxY)
+        assertContinuous(closed); assertContinuous(opened)
     }
-    func testBodyHonorsMenuBandTallerThanCameraSafeArea() {
+    func testAutomaticMenuBarHidingDoesNotDetachSyntheticNotch() {
+        let metrics = CameraScreenMetrics(screenFrame: screen, visibleFrame: screen)
+        for expanded in [false, true] {
+            let layout = CameraIslandGeometry.layout(screen: metrics, expanded: expanded, expandedWidth: 420, expandedHeight: 320)
+            XCTAssertEqual(layout.topInset, 32)
+            XCTAssertEqual(layout.capFrame?.maxY, screen.maxY)
+            XCTAssertEqual(layout.bodyFrame.maxY, screen.maxY - 32)
+        }
+    }
+    func testMenuBandTallerThanPhysicalOrSyntheticCameraIsReserved() {
         let metrics = CameraScreenMetrics(screenFrame: screen,
             visibleFrame: CGRect(x: 0, y: 87, width: 1512, height: 862), safeAreaTop: 32,
             auxiliaryLeft: CGRect(x: 0, y: 950, width: 663.5, height: 32),
             auxiliaryRight: CGRect(x: 848.5, y: 950, width: 663.5, height: 32))
         for expanded in [false, true] {
             let layout = CameraIslandGeometry.layout(screen: metrics, expanded: expanded, expandedWidth: 440, expandedHeight: 340)
+            XCTAssertEqual(layout.topInset, 33)
             XCTAssertEqual(layout.bodyFrame.maxY, 949)
             XCTAssertEqual(layout.capFrame?.maxY, 982)
             XCTAssertEqual(layout.capFrame?.minY, 945)
             XCTAssertEqual(layout.bodyFrame.height, expanded ? 340 : 4)
+            assertContinuous(layout)
         }
+        let tallMenu = CameraScreenMetrics(screenFrame: screen, visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 932))
+        let synthetic = CameraIslandGeometry.layout(screen: tallMenu, expanded: false, expandedWidth: 420, expandedHeight: 320)
+        XCTAssertFalse(synthetic.hasNotch)
+        XCTAssertEqual(synthetic.cameraHeight, 32)
+        XCTAssertEqual(synthetic.topInset, 50)
+        XCTAssertEqual(synthetic.capFrame?.maxY, screen.maxY)
+        XCTAssertEqual(synthetic.bodyFrame.maxY, 932)
     }
     func testGlobalNegativeDisplayCoordinatesStayCorrect() {
         let metrics = CameraScreenMetrics(screenFrame: CGRect(x: -1512, y: -300, width: 1512, height: 982),
@@ -72,44 +90,77 @@ final class IslandPlacementTests: XCTestCase {
         XCTAssertEqual(layout.frame.midX, -756)
         XCTAssertEqual(layout.frame.maxY, 682)
         XCTAssertTrue(metrics.screenFrame.contains(layout.frame))
-        XCTAssertLessThanOrEqual(layout.bodyFrame.maxY, metrics.screenFrame.maxY - layout.cameraHeight)
+        XCTAssertEqual(layout.bodyFrame.maxY, 645)
+        assertContinuous(layout)
     }
-    func testUnavailableOrMalformedAuxiliaryAreasUseBoundedFallback() {
+    func testMissingOrMalformedAuxiliaryAreasUseSame185PointFallback() {
         let noAuxiliary = CameraScreenMetrics(screenFrame: screen, visibleFrame: screen, safeAreaTop: 37)
+        let regular = CameraScreenMetrics(screenFrame: screen, visibleFrame: screen)
         let invalidAuxiliary = CameraScreenMetrics(screenFrame: screen, visibleFrame: screen, safeAreaTop: 37,
             auxiliaryLeft: CGRect(x: -9999, y: 0, width: 10, height: 1), auxiliaryRight: CGRect(x: 9999, y: 0, width: 10, height: 1))
-        for metrics in [noAuxiliary, invalidAuxiliary] {
+        for metrics in [noAuxiliary, regular, invalidAuxiliary] {
             let layout = CameraIslandGeometry.layout(screen: metrics, expanded: false, expandedWidth: 420, expandedHeight: 320)
-            XCTAssertEqual(layout.cameraWidth, 180)
-            XCTAssertEqual(layout.frame.width, 188)
+            XCTAssertEqual(layout.cameraWidth, 185)
+            XCTAssertEqual(layout.bodyFrame.width, 185)
+            XCTAssertEqual(layout.capFrame?.width, 209)
             XCTAssertEqual(layout.frame.midX, screen.midX)
-            XCTAssertNil(layout.capFrame)
+            XCTAssertEqual(layout.capFrame?.maxY, screen.maxY)
+            assertContinuous(layout)
+        }
+        let measured185 = CameraScreenMetrics(screenFrame: screen, visibleFrame: screen, safeAreaTop: 32,
+            auxiliaryLeft: CGRect(x: 0, y: 950, width: 663.5, height: 32),
+            auxiliaryRight: CGRect(x: 848.5, y: 950, width: 663.5, height: 32))
+        let real = CameraIslandGeometry.layout(screen: measured185, expanded: false, expandedWidth: 420, expandedHeight: 320)
+        let synthetic = CameraIslandGeometry.layout(screen: regular, expanded: false, expandedWidth: 420, expandedHeight: 320)
+        XCTAssertTrue(real.hasNotch)
+        XCTAssertFalse(synthetic.hasNotch)
+        XCTAssertEqual(real.cameraWidth, 185)
+        XCTAssertEqual(real.bodyFrame, synthetic.bodyFrame)
+        XCTAssertEqual(real.capFrame, synthetic.capFrame)
+    }
+    func testTinyScreensAndLargePreferencesKeepAllWindowsWithinPhysicalBounds() {
+        for physical in [false, true] {
+            for small in [CGRect(x: -120, y: 40, width: 120, height: 100), CGRect(x: -14, y: -8, width: 14, height: 8)] {
+                let metrics = CameraScreenMetrics(screenFrame: small, visibleFrame: small, safeAreaTop: physical ? 20 : 0)
+                for expanded in [false, true] {
+                    let layout = CameraIslandGeometry.layout(screen: metrics, expanded: expanded, expandedWidth: 99999, expandedHeight: 99999)
+                    assertBounds(layout.frame, in: small)
+                    assertBounds(layout.bodyFrame, in: small)
+                    assertBounds(layout.capFrame!, in: small)
+                    XCTAssertEqual(layout.frame.maxY, small.maxY)
+                    XCTAssertLessThanOrEqual(layout.topInset, small.height)
+                    XCTAssertEqual(layout.bodyFrame.width, min(layout.cameraWidth, small.width - min(24, max(0, small.width - 1))))
+                }
+            }
         }
     }
-    func testTinyScreensAndLargePreferencesNeverLeavePhysicalBounds() {
-        let small = CGRect(x: -120, y: 40, width: 120, height: 100)
-        let metrics = CameraScreenMetrics(screenFrame: small, visibleFrame: small, safeAreaTop: 20,
-            auxiliaryLeft: CGRect(x: -120, y: 120, width: 52, height: 20),
-            auxiliaryRight: CGRect(x: -52, y: 120, width: 52, height: 20))
-        for expanded in [false, true] {
-            let layout = CameraIslandGeometry.layout(screen: metrics, expanded: expanded, expandedWidth: 99999, expandedHeight: 99999)
-            XCTAssertTrue(small.contains(layout.frame))
-            XCTAssertLessThanOrEqual(layout.topInset, layout.frame.height)
-            XCTAssertEqual(layout.frame.maxY, small.maxY)
-            XCTAssertLessThanOrEqual(layout.bodyFrame.maxY, small.maxY - layout.cameraHeight)
-            XCTAssertTrue(small.contains(layout.bodyFrame))
-            XCTAssertTrue(small.contains(layout.capFrame!))
-        }
-    }
-    func testInvalidMeasurementsNeverProduceNaNOrInfiniteWindowFrames() {
+    func testInvalidMeasurementsCannotCreateNonFiniteFrames() {
         let metrics = CameraScreenMetrics(screenFrame: screen, visibleFrame: .null, safeAreaTop: .nan)
         let layout = CameraIslandGeometry.layout(screen: metrics, expanded: true, expandedWidth: .infinity, expandedHeight: .nan)
         XCTAssertFalse(layout.hasNotch)
         XCTAssertTrue(screen.contains(layout.frame))
-        XCTAssertEqual(layout.frame.width, 420)
+        XCTAssertEqual(layout.bodyFrame.width, 420)
+        XCTAssertEqual(layout.frame.width, 444)
         let missing = CameraScreenMetrics(screenFrame: .zero, visibleFrame: .zero)
-        XCTAssertEqual(CameraIslandGeometry.layout(screen: missing, expanded: true, expandedWidth: 420, expandedHeight: 320).frame, .zero)
+        let empty = CameraIslandGeometry.layout(screen: missing, expanded: true, expandedWidth: 420, expandedHeight: 320)
+        XCTAssertEqual(empty.frame, .zero)
+        XCTAssertNil(empty.capFrame)
         let overflow = CGRect(x: Double.greatestFiniteMagnitude, y: 0, width: Double.greatestFiniteMagnitude, height: 100)
         XCTAssertEqual(CameraIslandGeometry.layout(screen: .init(screenFrame: overflow, visibleFrame: overflow), expanded: true, expandedWidth: 420, expandedHeight: 320).frame, .zero)
+    }
+    private func assertContinuous(_ layout: IslandWindowLayout, file: StaticString = #filePath, line: UInt = #line) {
+        guard let cap = layout.capFrame else { XCTFail("Valid screen requires an attached cap", file: file, line: line); return }
+        XCTAssertEqual(cap.width, layout.bodyFrame.width + 24, file: file, line: line)
+        XCTAssertEqual(layout.bodyFrame.minX, cap.minX + 12, file: file, line: line)
+        XCTAssertEqual(cap.maxX - layout.bodyFrame.maxX, 12, file: file, line: line)
+        XCTAssertEqual(layout.bodyFrame.maxY - cap.minY, 4, file: file, line: line)
+        XCTAssertEqual(layout.frame.maxY, cap.maxY, file: file, line: line)
+        XCTAssertEqual(layout.frame.minY, layout.bodyFrame.minY, file: file, line: line)
+    }
+    private func assertBounds(_ rect: CGRect, in screen: CGRect, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertGreaterThanOrEqual(rect.minX, screen.minX, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(rect.minY, screen.minY, file: file, line: line)
+        XCTAssertLessThanOrEqual(rect.maxX, screen.maxX, file: file, line: line)
+        XCTAssertLessThanOrEqual(rect.maxY, screen.maxY, file: file, line: line)
     }
 }
