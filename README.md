@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.1.0**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.2.0**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -38,6 +38,18 @@ O projeto Xcode está versionado. Após adicionar/remover arquivos Swift do apli
 
 “Implementado” descreve código integrado; veja [ROADMAP.md](ROADMAP.md) para as verificações executadas e os fluxos ainda não validados interativamente. O timer é compartilhado entre Island e widgets e não sobrevive ao encerramento do aplicativo.
 
+## Personalização 0.2
+
+Em **Dynamic Island**, escolha tema claro/escuro/sistema, superfície sólida ou vidro, cor, opacidade, cantos, borda, sombra e duração da animação. O botão de pin mantém a Island aberta. A opção **Live compact status** mostra dados do módulo selecionado; fica desligada por padrão para reduzir atividade em repouso. Ajustes visuais preservam a janela e a expressão da calculadora.
+
+Em **Dock**, personalize magnificação, animação, material, cor e rótulos. Ative aplicativos em execução para fixá-los pelo menu contextual, ou mostre uma Dock em cada tela. O menu permite abrir, revelar no Finder e solicitar encerramento normal de um aplicativo, sem force quit.
+
+Em **Widgets**, abra as opções de cada widget: nome, tamanho de texto, conteúdo, fuso horário e relógio 12/24h com segundos opcionais. É possível duplicar, centralizar, trazer à frente, mostrar/ocultar todos e organizar automaticamente. O snap usa o handle de arraste e o fim do redimensionamento; arrastar o fundo continua disponível, mas não garante snap. Sem segundos, relógios atualizam uma vez por minuto.
+
+A calculadora é compartilhada entre Island e widgets. Seu histórico é opcional, desligado por padrão, limitado a 30 entradas e apagado ao desativá-lo. Return registra um cálculo; o histórico permite reutilizar ou excluir entradas. O timer tem nome, presets editáveis, alerta Glass/Ping ou silencioso, progresso, extensão de um minuto e reinício.
+
+O JSON mantém compatibilidade com exportações anteriores e agora inclui opções de widgets/grade, preferências do timer e a opção de histórico. Expressões do histórico e temporizadores em execução não são exportados.
+
 ## Permissões e privacidade
 
 Calendário só pede acesso após o botão de conexão. Abra Apple Music ou Spotify antes de conectar; o macOS pode solicitar Automation para cada player. Negativas geram mensagem de erro e exigem reconexão explícita. Ajustes de permissões ficam em **System Settings → Privacy & Security**.
@@ -48,7 +60,7 @@ Notas e preferências são armazenadas em UserDefaults no Mac. Exportações JSO
 
 ## Validação
 
-`swift test` executa os testes do parser, countdown e configurações. O harness [Scripts/service-smoke.swift](Scripts/service-smoke.swift) documenta como compilar e executar verificações reais dos serviços sem solicitar Calendar/Automation.
+`swift test` executa os testes do parser, countdown e configurações. Execute `python3 Scripts/validate_native.py` para compilar e rodar os quatro harnesses nativos (serviços, produtividade, Dock e widgets), sem solicitar Calendar/Automation. O comando usa Python padrão e o compilador do Xcode, sem dependências externas.
 
 Build Debug aceita `--validate`: executa verificações internas com UserDefaults isolado e salva resultados/capturas em `/tmp/BetterApple-validation`. Essa rotina abre janelas temporárias, executa um timer curto e encerra. Não é incluída no build Release.
 

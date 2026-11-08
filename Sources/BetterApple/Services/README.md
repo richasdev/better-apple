@@ -41,8 +41,12 @@ Official references: [EventKit access](https://developer.apple.com/documentation
 The retained harness checks timer pause/resume and invalid input, no automatic music connection, third-party adapter registration/selection without launching it, and live public system readings. It also temporarily registers an optional shortcut using an isolated preferences suite, verifies conflict/retry/teardown, and removes those preferences. It does not request Calendar or Automation access, play a sound, control players or write volume.
 
 ```sh
-/opt/homebrew/bin/rtk proxy xcrun swiftc -swift-version 5 -target arm64-apple-macosx14.0 -parse-as-library Sources/BetterApple/Services/*.swift Scripts/service-smoke.swift -o /tmp/betterapple-service-smoke
-/opt/homebrew/bin/rtk proxy /tmp/betterapple-service-smoke
+/opt/homebrew/bin/rtk proxy python3 Scripts/validate_native.py --only services
+/opt/homebrew/bin/rtk proxy python3 Scripts/validate_native.py --only productivity
 ```
 
-Use `x86_64-apple-macosx14.0` instead of `arm64-apple-macosx14.0` on an Intel development Mac.
+The runner detects arm64/x86_64, compiles the local core module, links each harness and cleans up temporary binaries. Omit `--only` to include Dock and widget checks.
+
+## Productivity preferences (0.2)
+
+CalculatorService shares one expression between Island/widgets. History is opt-in (off by default), locally persisted, validated and bounded to 30 entries. Disabling history erases it. Result copying uses an invariant numeric format. Calculator history entries are excluded from configuration exports. Timer preferences include a bounded label, up to eight 1–1440 minute presets and Glass/Ping/silent completion; active deadlines are not persisted or exported. Preference changes do not run polling.

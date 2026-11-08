@@ -1,0 +1,152 @@
+{
+  "date": "2026-11-08",
+  "version": "0.2.0",
+  "sourceRevision": "5a7991cf2376140df3ac537a6640ac144fa45e88",
+  "environment": {
+    "macOS": "27.0.1 (26A434)",
+    "Xcode": "27.0 (27A266a)",
+    "host": "arm64 MacBook Pro, 16 GiB",
+    "minimumDeploymentTarget": "macOS14"
+  },
+  "builds": {
+    "xcodeDebugArm64": true,
+    "xcodeReleaseUniversal": true
+  },
+  "releaseArchitectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "coreTests": {
+    "executed": 12,
+    "failures": 0
+  },
+  "runtimeValidation": {
+    "checks": {
+      "all widget kinds created": true,
+      "appearance updates preserve island window and calculation": true,
+      "compact island releases demand": true,
+      "dock resolves real applications": true,
+      "hidden widgets release demand": true,
+      "invalid suite import preserves settings": true,
+      "island pin and dismiss": true,
+      "island window expanded": true,
+      "legacy suite imports without losing notes": true,
+      "notes updated": true,
+      "safe calculator evaluates": true,
+      "settings window presented": true,
+      "shared calculator commits optional history": true,
+      "suite JSON restores actual settings and widgets": true,
+      "suite restores new personalization": true,
+      "timer completed": true,
+      "widget duplication preserves note and appearance": true,
+      "workspace preset remains selected": true
+    },
+    "passed": true,
+    "windowCount": 5
+  },
+  "nativeChecks": {
+    "services": "passed",
+    "productivity": "passed",
+    "dock": "passed",
+    "widgets": "passed",
+    "runner": "python3 Scripts/validate_native.py"
+  },
+  "idleRelease": {
+    "conditions": "Compact Island, live compact status off, settings closed, no enabled Dock/widgets/player; short ps sampling",
+    "sampleCount": 20,
+    "intervalSeconds": 1,
+    "samples": [
+      {
+        "cpu": 0.2,
+        "rssKB": 86048.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 81424.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77648.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77648.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77776.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77680.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77680.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77568.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77568.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77568.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77632.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77632.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77632.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77632.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77632.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77616.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77616.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77616.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77616.0
+      },
+      {
+        "cpu": 0.0,
+        "rssKB": 77616.0
+      }
+    ],
+    "cpuMean": 0.01,
+    "cpuMax": 0.2,
+    "rssMiBMean": 76.40859375,
+    "rssMiBMax": 84.03125
+  },
+  "limitations": [
+    "Computer Use helper still returns Accessibility permission_denied",
+    "In-app captures cannot certify full visual composition",
+    "Real Calendar/Automation permission and player controls not exercised",
+    "No physical multi-monitor matrix, macOS14/15 or Intel execution",
+    "RSS is not Activity Monitor physical footprint; no sustained-memory, leak or FPS certification"
+  ]
+}

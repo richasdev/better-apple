@@ -4,7 +4,7 @@
 
 2026-11-08: MacBook Pro Apple silicon, 16 GiB de memória física, macOS **27.0.1 (26A434)**, Xcode **27.0 (27A266a)**, Swift **6.4**, linguagem Swift 5 e deployment target macOS 14. Não houve execução em macOS 14/15 ou hardware Intel nesta sessão.
 
-## Resultados reais
+## Resultados da fundação 0.1.0
 
 | Verificação | Resultado |
 |---|---|
@@ -45,3 +45,11 @@ O build Debug com Settings aberta chegou a aproximadamente **104 MiB de RSS** em
 6. Meça lançamento com App Launch e inclua macOS 14/15, monitores externos, Spaces e sono prolongado.
 
 Capturas Instruments ficam locais em `/tmp` e não são versionadas. Podem conter metadados do ambiente do processo; o repositório conserva apenas resultados resumidos. Nenhuma afirmação de ausência de vazamentos é feita sem esses perfis adicionais.
+
+## Personalização 0.2.0
+
+A nova rodada executou **12 testes XCTest sem falhas**, **18 verificações internas** e os quatro harnesses nativos (serviços, produtividade, Dock, widgets). As verificações cobrem migração de preferências antigas, presets/Custom, manutenção da janela durante personalização, histórico opt-in, preferências do timer, duplicação/estilo de widgets, fusos horários, configuração por monitor e roundtrip JSON. A automação externa continua retornando permission_denied; os fluxos de mouse/teclado não foram declarados validados por esses testes internos.
+
+Em Release 0.2.0, com Island compacta, status compacto desligado, Settings fechada, sem Dock/widgets ou player conectado, foram feitas 20 leituras de ps a cada segundo, após 2 segundos iniciais: RSS médio **76,41 MiB**, máximo **84,03 MiB**; CPU média reportada **0,01%**, máxima **0,2%**. São amostras curtas, não uma comprovação de redução em relação a 0.1 nem da meta em uso comum. Os dados estão em Validation/2026-11-08-personalization.json.
+
+Status compacto ao vivo é opt-in: o serviço do módulo selecionado segue a mesma frequência de uma Island expandida, apenas enquanto a janela está visível. Clocks sem segundos usam agendamento alinhado a um minuto. Novos temas, presets e preferências não criam novos timers globais. Reduce Transparency usa fundos opacos nas três superfícies.

@@ -10,7 +10,7 @@ Legenda: `[x]` código integrado e verificação indicada; `[ ]` pendente, parci
 - [x] Atalho global opcional configurável; registro, conflito, liberação e persistência verificados em harness.
 - [x] Repositório privado e commits separados por área.
 - [x] Builds reais SPM, Xcode Debug e Xcode Release em Apple silicon.
-- [x] Sete testes do núcleo sem falhas.
+- [x] Doze testes do núcleo sem falhas, incluindo temas/presets e histórico de cálculo.
 - [ ] Definir licença de distribuição, marcas, assinatura e notarização.
 
 ## Fase 2 — Dynamic Island
@@ -22,7 +22,7 @@ Legenda: `[x]` código integrado e verificação indicada; `[ ]` pendente, parci
 - [x] Validação interna executou expansão/recolhimento, cálculo e conclusão real de timer.
 - [ ] Validar concessão/revogação do calendário com dados reais; não foi solicitado acesso durante o desenvolvimento automatizado.
 - [ ] Verificar manualmente hover, foco de campos, áreas de menu, Spaces e tela cheia em macOS 14/15.
-- [ ] Histórico opcional de calculadora.
+- [x] Histórico opcional de calculadora com limite, limpeza e reutilização.
 
 ## Fase 3 — Música
 
@@ -38,7 +38,8 @@ Legenda: `[x]` código integrado e verificação indicada; `[ ]` pendente, parci
 - [x] Posição, monitor selecionável, auto-hide, magnificação, materiais e configurações.
 - [x] Validação interna confirmou resolução de aplicativos reais.
 - [ ] Validar arraste/reordenação/hover manualmente e com várias telas físicas.
-- [ ] Instâncias simultâneas em vários monitores, temas próprios além dos presets de tamanho/opacidade.
+- [x] Instâncias simultâneas da Dock por monitor e personalização de material, tema, cor e magnificação; smoke validou a contagem nas telas conectadas.
+- [ ] Validar comportamento em múltiplos monitores físicos diferentes.
 
 ## Fase 5 — Widgets
 
@@ -46,7 +47,8 @@ Legenda: `[x]` código integrado e verificação indicada; `[ ]` pendente, parci
 - [x] Visibilidade individual, tamanhos/posições persistidos, modo de edição, temas/cores, bordas e sombras.
 - [x] Validação interna criou todos os tipos, alterou notas e confirmou liberação de demanda ao ocultar.
 - [ ] Validar manualmente arraste, resize, retorno entre Spaces, teclado e layouts após desconectar monitores.
-- [ ] Seleção granular de informações por widget; hoje cada tipo define seu conteúdo.
+- [x] Seleção granular de informações por tipo, fontes, títulos e fusos horários.
+- [x] Duplicação, organização e snap ao arrastar pelo handle ou terminar resize.
 
 ## Fase 6 — Otimização e qualidade
 
@@ -60,4 +62,14 @@ Legenda: `[x]` código integrado e verificação indicada; `[ ]` pendente, parci
 
 ## Limitação da validação visual
 
-O helper de Computer Use do Orca retornou `permission_denied` para Accessibility ao inspecionar o processo, inclusive após informar permissão concedida. Nenhuma interação externa foi declarada aprovada. Uma repetição inicial confundiu expansão com demanda visível quando havia outra instância aberta; o harness foi corrigido para verificar a geometria real da janela e executado isoladamente. A rotina Debug `--validate` usa os próprios managers e NSViews, sem essa permissão, e passou onze verificações. Capturas internas de NSView têm limitações de composição (materiais/alguns conteúdos podem ficar escuros ou vazios) e não substituem captura real e QA manual.
+O helper de Computer Use do Orca retornou `permission_denied` para Accessibility ao inspecionar o processo, inclusive após informar permissão concedida. Nenhuma interação externa foi declarada aprovada. Uma repetição inicial confundiu expansão com demanda visível quando havia outra instância aberta; o harness foi corrigido para verificar a geometria real da janela e executado isoladamente. A rotina Debug `--validate` usa os próprios managers e NSViews, sem essa permissão, e passou dezoito verificações. Capturas internas de NSView têm limitações de composição (materiais/alguns conteúdos podem ficar escuros ou vazios) e não substituem captura real e QA manual.
+
+## Evolução 0.2.0
+
+- [x] Temas da Island, materiais, cor, borda/sombra/cantos e animação configuráveis; Reduce Transparency respeitado.
+- [x] Pin da Island, status compacto opcional e atualizações visuais sem recriar a janela.
+- [x] Presets determinísticos e identificação de aparência Custom após ajustes manuais.
+- [x] Timer com rótulo, presets, progresso, alerta configurável, extensão e reinício.
+- [x] Importação das preferências antigas verificada na suíte integrada, preservando notas.
+- [x] Quatro harnesses nativos de serviços, produtividade, Dock e widgets executados.
+- [ ] QA visual/interativo continua limitado pela permissão do helper de Computer Use.

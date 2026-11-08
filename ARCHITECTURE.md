@@ -23,7 +23,7 @@ O núcleo Foundation é uma biblioteca Swift Package separada. O executável usa
 
 `IslandModule` fornece identidade e conteúdo; `IslandModuleRegistry` registra implementações por protocolo. Adicionar comportamento de módulo não exige alterar o gerenciador de janelas, embora adicionar uma identidade persistível exija estender `ModuleID` e os defaults/migração. Módulos são criados quando exibidos.
 
-Widgets usam NSPanel com nível normal, sem substituir WidgetKit ou o desktop do sistema. O modo de edição habilita resize e arraste com um handle AppKit. Cada widget pode existir várias vezes, compartilhando os serviços. A Dock usa uma janela independente no monitor selecionado, com notificações de abertura/fechamento de aplicativos e área fina de revelação para auto-hide. Replicar a Dock simultaneamente em todos os monitores fica para uma etapa posterior.
+Widgets usam NSPanel com nível normal, sem substituir WidgetKit ou o desktop do sistema. O modo de edição habilita resize e arraste com um handle AppKit. Cada widget pode existir várias vezes, compartilhando os serviços. A Dock usa uma janela independente no monitor selecionado, com notificações de abertura/fechamento de aplicativos e área fina de revelação para auto-hide. A opção allDisplays agora mantém uma janela Dock por tela, com associação explícita e hover independente.
 
 ## Atualizações e concorrência
 
@@ -44,3 +44,13 @@ Observações: a separação entre painéis AppKit e conteúdo SwiftUI permite c
 BetterApple implementa essas responsabilidades com modelos próprios, preferências Codable e registro por protocolo. Não importamos código, imagens, snippets, dependências ou binários do Atoll. MediaRemote, SkyLight, IOReport/SMC privados e manipulações da Dock do sistema não fazem parte deste projeto. Essa independência técnica não substitui revisão jurídica de licença/marcas antes de distribuição.
 
 Referências oficiais: [NSScreen safe areas](https://developer.apple.com/documentation/appkit/nsscreen/safeareainsets), [NSPanel](https://developer.apple.com/documentation/appkit/nspanel), [EventKit](https://developer.apple.com/documentation/eventkit/ekeventstore/requestfullaccesstoevents(completion:)), [SMAppService](https://developer.apple.com/documentation/servicemanagement/smappservice). Limitações por serviço em [Services/README.md](Sources/BetterApple/Services/README.md).
+
+## Personalização e continuidade de estado (0.2)
+
+IslandSettings armazena IslandAppearance opcional para ler exportações v1 antigas. Campos visuais validam limites; temas e material são resolvidos na camada SwiftUI. Edições usam IslandManager.applySettings sem recriar painéis/hosting views; alterações no conjunto de telas ainda recriam as janelas. Pin é estado transitório. O status compacto opcional participa da agregação de demanda.
+
+CalculatorService é uma instância compartilhada entre Island e widgets; CalculatorHistory contém dados Codable validados e limitados, sem execução de código. History está desligado por padrão e sua desativação apaga entradas. TimerPreferences contém apenas preferências; deadlines não são importados ou exportados.
+
+DockPreferences e WidgetDisplayOptions decodificam campos novos com defaults; widgets antigos usam opções ausentes. A suíte valida todos os documentos antes de tocar nos managers e exporta configurações de grade, timer e opt-in de histórico. Histórico matemático e estado de reprodução não entram nos arquivos exportados.
+
+Scripts/validate_native.py compila o núcleo em diretório temporário e executa harnesses reais dos quatro subsistemas, sem bibliotecas de terceiros e sem solicitar Calendar/Automation. O projeto Xcode continua gerado sem dependências externas.
