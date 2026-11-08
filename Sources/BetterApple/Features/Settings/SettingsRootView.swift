@@ -80,10 +80,14 @@ struct SettingsRootView: View {
                     Text("A quieter way to work.").font(.title2.weight(.semibold))
                     Text("Your music, tools and desktop, within reach. Each surface runs independently and stays on your Mac.").foregroundStyle(.secondary)
                 }
-                Section("Your workspace") {
-                    Toggle("Dynamic Island", isOn: $model.settings.island.enabled)
-                    Toggle("Independent Dock", isOn: $dock.preferences.enabled)
-                    Toggle("Edit widget layout", isOn: $widgets.editing)
+                Section("Choose your features") {
+                    feature("Dynamic Island", symbol: "capsule", description: "Music and quick tools, tucked into your camera area.", enabled: $model.settings.island.enabled, destination: .island)
+                    feature("Personalized Dock", symbol: "dock.rectangle", description: "Your apps in an independent, customizable Dock.", enabled: $dock.preferences.enabled, destination: .dock)
+                    feature("Widgets", symbol: "square.grid.2x2", description: "Clocks, notes and useful information on your desktop.", enabled: $widgets.enabled, destination: .widgets)
+                    Text("Use any combination. Turning a feature off keeps its setup and closes its windows. Widgets return with the same content, positions and individual visibility.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Startup") {
                     Toggle("Launch at login", isOn: Binding(get: { SMAppService.mainApp.status == .enabled }, set: { enabled in
                         do {
                             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
@@ -152,6 +156,22 @@ struct SettingsRootView: View {
                 }
             }.formStyle(.grouped)
         }
+    }
+    private func feature(_ title: String, symbol: String, description: String, enabled: Binding<Bool>, destination: SettingsSection) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol).font(.system(size: 21, weight: .medium))
+                .foregroundStyle(enabled.wrappedValue ? model.settings.island.visual.accent.color : Color.secondary)
+                .frame(width: 32).accessibilityHidden(true)
+            Toggle(isOn: enabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.headline)
+                    Text(description).font(.caption).foregroundStyle(.secondary)
+                }
+            }.toggleStyle(.switch).tint(model.settings.island.visual.accent.color)
+                .accessibilityHint("Turning off preserves your configuration")
+            Button { selection = destination } label: { Image(systemName: "chevron.right") }
+                .buttonStyle(.borderless).help("Configure \(title)").accessibilityLabel("Configure \(title)")
+        }.padding(.vertical, 8)
     }
     private func slider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String = "pt") -> some View {
         VStack(alignment: .leading) {

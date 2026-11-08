@@ -15,6 +15,20 @@ private struct WidgetWindowState: Equatable {
 
 @MainActor
 final class WidgetManager: ObservableObject {
+    @Published var enabled: Bool {
+        didSet {
+            guard enabled != oldValue else { return }
+            defaults.set(enabled, forKey: "widgets.enabled")
+            if !enabled {
+                editing = false
+                // A feature switch tears down even panels still finishing a fade.
+                let retiring = Array(retiringPanels.values)
+                retiringPanels.removeAll()
+                retiring.forEach { $0.orderOut(nil); $0.contentView = nil; $0.close() }
+            }
+            refresh()
+        }
+    }
     @Published var widgets: [WidgetConfiguration] {
         didSet {
             scheduleSave()
@@ -24,6 +38,7 @@ final class WidgetManager: ObservableObject {
     }
     @Published var editing = false {
         didSet {
+            if editing && !enabled { editing = false; return }
             guard editing != oldValue else { return }
             refresh()
             if editing { panels.values.forEach { $0.orderFrontRegardless() } }
@@ -56,7 +71,7 @@ final class WidgetManager: ObservableObject {
     private var userInitiatedChange = false
     var onVisibilityChange: (() -> Void)?
     var activeKinds: Set<DesktopWidgetKind> {
-        guard !suspended else { return [] }
+        guard enabled, !suspended else { return [] }
         return Set(widgets.compactMap { widget in
             guard widget.visible, let panel = panels[widget.id], panel.isVisible, panel.occlusionState.contains(.visible) else { return nil }
             return widget.kind
@@ -66,6 +81,7 @@ final class WidgetManager: ObservableObject {
     init(calendar: CalendarService, music: MusicService, system: SystemStatusService, timer: TimerService, calculator: CalculatorService? = nil, defaults: UserDefaults = .standard) {
         self.calendar = calendar; self.music = music; self.system = system; self.timer = timer; self.defaults = defaults
         self.calculator = calculator ?? CalculatorService(defaults: defaults)
+        enabled = defaults.object(forKey: "widgets.enabled") as? Bool ?? true
         layoutPreferences = defaults.data(forKey: "widgets.editing").flatMap { try? JSONDecoder().decode(WidgetLayoutPreferences.self, from: $0).validated() } ?? WidgetLayoutPreferences()
         widgets = defaults.data(forKey: "widgets.layout").flatMap { try? JSONDecoder().decode([WidgetConfiguration].self, from: $0) } ?? []
         // Validate persisted geometry before allocating windows.
@@ -155,9 +171,9 @@ final class WidgetManager: ObservableObject {
         guard !updating else { return }
         updating = true
         defer { updating = false; scheduleVisibilityChange() }
-        let visibleIDs = Set(suspended ? [] : widgets.filter(\.visible).map(\.id))
+        let visibleIDs = Set(suspended || !enabled ? [] : widgets.filter(\.visible).map(\.id))
         for id in Array(panels.keys) where !visibleIDs.contains(id) {
-            if let panel = panels[id] { retirePanel(panel, id: id, animated: animated && !suspended) }
+            if let panel = panels[id] { retirePanel(panel, id: id, animated: animated && !suspended && enabled) }
             panels.removeValue(forKey: id); delegates.removeValue(forKey: id)
         }
         for item in widgets where visibleIDs.contains(item.id) {
@@ -179,6 +195,8 @@ final class WidgetManager: ObservableObject {
                 panel.maxSize = NSSize(width: 800, height: 800)
                 let delegate = WidgetWindowDelegate(manager: self, id: item.id)
                 panel.delegate = delegate; delegates[item.id] = delegate; panels[item.id] = panel
+                // NSPanel starts with an empty NSView, not a nil content view.
+                panel.contentView = NSHostingView(rootView: DesktopWidgetView(manager: self, id: item.id))
             }
             panel.isMovableByWindowBackground = editing
             let mask: NSWindow.StyleMask = editing ? [.titled, .resizable, .fullSizeContentView, .nonactivatingPanel] : [.titled, .fullSizeContentView, .nonactivatingPanel]

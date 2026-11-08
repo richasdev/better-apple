@@ -4,7 +4,7 @@ import Combine
 import BetterAppleCore
 
 @MainActor
-final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
+final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation, ObservableObject {
     let model: AppModel
     let calendar = CalendarService()
     let music = MusicService()
@@ -80,7 +80,13 @@ final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "circle.lefthalf.filled", accessibilityDescription: "BetterApple")
         let menu = NSMenu()
+        menu.delegate = self
         let title = NSMenuItem(title: "BetterApple", action: nil, keyEquivalent: ""); title.isEnabled = false; menu.addItem(title)
+        menu.addItem(.separator())
+        for (label, action, tag) in [("Dynamic Island", #selector(toggleIslandFeature), 101), ("Personalized Dock", #selector(toggleDockFeature), 102), ("Widgets", #selector(toggleWidgetsFeature), 103)] {
+            let entry = NSMenuItem(title: label, action: action, keyEquivalent: "")
+            entry.target = self; entry.tag = tag; menu.addItem(entry)
+        }
         menu.addItem(.separator())
         for (label, action, key) in [("Open / Close Island", #selector(toggleIsland), "i"), ("Settings…", #selector(showSettings), ","), ("Edit Widgets", #selector(editWidgets), "e")] {
             let entry = NSMenuItem(title: label, action: action, keyEquivalent: key); entry.target = self; menu.addItem(entry)
@@ -90,6 +96,19 @@ final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
         item.menu = menu; statusItem = item
     }
     @objc private func toggleIsland() { island.toggle() }
+    @objc private func toggleIslandFeature() { model.settings.island.enabled.toggle() }
+    @objc private func toggleDockFeature() { dock.preferences.enabled.toggle() }
+    @objc private func toggleWidgetsFeature() { widgets.enabled.toggle() }
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.item(withTag: 101)?.state = model.settings.island.enabled ? .on : .off
+        menu.item(withTag: 102)?.state = dock.preferences.enabled ? .on : .off
+        menu.item(withTag: 103)?.state = widgets.enabled ? .on : .off
+    }
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleIsland) { return model.settings.island.enabled }
+        if menuItem.action == #selector(editWidgets) { return widgets.enabled }
+        return true
+    }
     @objc private func editWidgets() { widgets.editing.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }
     func showDockSettings() { lastSettingsSection = "Dock"; showSettings() }
@@ -135,6 +154,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
         var widgetLayout: WidgetLayoutPreferences?
         var timer: TimerPreferences?
         var calculator: CalculatorConfiguration?
+        var widgetsEnabled: Bool?
     }
     private struct ShortcutConfiguration: Codable {
         var enabled: Bool
@@ -155,7 +175,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
         guard widgets.widgets.allSatisfy({ $0.note.count <= 100000 }) else { throw SettingsError.tooLarge }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let shortcut = ShortcutConfiguration(enabled: shortcuts.enabled, key: shortcuts.key.rawValue, modifiers: shortcuts.modifiers.rawValue)
-        let data = try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut, widgetLayout: widgets.layoutPreferences, timer: timer.preferences, calculator: CalculatorConfiguration(historyEnabled: calculator.historyEnabled)))
+        let data = try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut, widgetLayout: widgets.layoutPreferences, timer: timer.preferences, calculator: CalculatorConfiguration(historyEnabled: calculator.historyEnabled), widgetsEnabled: widgets.enabled))
         guard data.count <= 2 * 1024 * 1024 else { throw SettingsError.tooLarge }
         return data
     }
@@ -188,7 +208,11 @@ final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
         }
         applyingPreferences = true
         defer { applyingPreferences = false }
-        model.replaceSettings(settings); dock.preferences = dockPreferences; widgets.widgets = widgetConfigurations
+        model.replaceSettings(settings); dock.preferences = dockPreferences
+        // Disable before replacing layouts so importing an off configuration cannot flash widgets.
+        if suite.widgetsEnabled == false { widgets.enabled = false }
+        widgets.widgets = widgetConfigurations
+        if let enabled = suite.widgetsEnabled { widgets.enabled = enabled }
         if let layout { widgets.layoutPreferences = layout }
         if let preferences = suite.timer { timer.preferences = preferences.normalized() }
         if let preferences = suite.calculator { calculator.historyEnabled = preferences.historyEnabled }

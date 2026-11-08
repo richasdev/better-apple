@@ -10,16 +10,23 @@ struct WidgetSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                Toggle("Enable Widgets", isOn: $manager.enabled).toggleStyle(.switch)
+                if !manager.enabled {
+                    Text("Widgets are off. Your content and layout are saved; turn them on to restore your desktop.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Your desktop") {
                 HStack {
-                    Label("\(manager.widgets.filter(\.visible).count) visible · \(manager.widgets.count) total", systemImage: "square.grid.2x2")
+                    Label("\(manager.widgets.filter(\.visible).count) selected · \(manager.widgets.count) total", systemImage: "square.grid.2x2")
                         .foregroundStyle(.secondary)
                     Spacer()
                     Menu("Add widget") {
                         ForEach(DesktopWidgetKind.allCases) { kind in Button(kind.title, systemImage: kind.symbol) { manager.add(kind: kind) } }
                     }.disabled(manager.widgets.count >= 30)
                 }
-                Toggle("Edit layout", isOn: $manager.editing)
+                Toggle("Edit layout", isOn: $manager.editing).disabled(!manager.enabled)
                 Toggle("Snap to grid after moving or resizing", isOn: $manager.layoutPreferences.snapToGrid)
                 if manager.layoutPreferences.snapToGrid {
                     Picker("Grid spacing", selection: $manager.layoutPreferences.gridSize) {
@@ -30,7 +37,7 @@ struct WidgetSettingsView: View {
                     }.transition(WorkspaceMotion.transition(reduceMotion: reduceMotion))
                 }
                 HStack {
-                    Button("Arrange visible widgets") { manager.arrangeVisible() }.disabled(!manager.widgets.contains(where: \.visible))
+                    Button("Arrange visible widgets") { manager.arrangeVisible() }.disabled(!manager.enabled || !manager.widgets.contains(where: \.visible))
                     Button("Show all") { manager.setAllVisible(true) }.disabled(manager.widgets.isEmpty)
                     Button("Hide all") { manager.setAllVisible(false) }.disabled(manager.widgets.isEmpty)
                 }
@@ -55,7 +62,7 @@ struct WidgetSettingsView: View {
                         HStack {
                             Label(item.displayTitle, systemImage: item.kind.symbol).lineLimit(1)
                             Spacer()
-                            Text(item.visible ? "Visible" : "Hidden").font(.caption).foregroundStyle(item.visible ? .secondary : .tertiary)
+                            Text(item.visible ? (manager.enabled ? "Visible" : "Feature off") : "Hidden").font(.caption).foregroundStyle(item.visible ? .secondary : .tertiary)
                         }
                     }
                 }
