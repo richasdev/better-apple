@@ -41,3 +41,17 @@ A [Apple documenta que a ativação é uma solicitação dependente do contexto 
 - Allocations/Leaks por períodos prolongados e uso comum com múltiplos widgets.
 
 Resultados consolidados e medições da versão ficam em `Validation/2026-11-08-motion.json` e [PERFORMANCE.md](PERFORMANCE.md). Esses limites impedem afirmar uma certificação visual perfeita; não substituem os testes executados.
+
+## Integração com câmera — 0.4.0
+
+Problema: a Island aparecia como uma janela abaixo da barra, distante da câmera. Uma expansão larga sobre a barra também poderia interceptar comandos dos menus.
+
+Alteração: cap preto estreito no gap físico medido, corpo separado abaixo da faixa reservada pelo sistema e uma borda compacta de 4 pt. Hover mantém o cap estável e expande o corpo para baixo, com as transições finitas existentes e Reduce Motion. Camera desativa dados compactos; Floating preserva toda a aparência anterior. Na falta de notch, faixa de 80 × 8 pt abaixo da barra.
+
+Julgamento e correções: revisão independente identificou que clique após hover não deveria recolher e que migração automática não poderia sobrescrever JSON incompatível; ambos corrigidos. O teste nativo revelou safe area de 32 pt e barra efetiva de 33 pt neste Mac. A geometria agora respeita o maior limite, evitando o deslocamento automático de 1 pt pelo AppKit. A origem horizontal compacta foi alinhada pelo AppKit de 659,5 a 659 pt; a comparação admite menos de 1 pt, mantendo dimensões exatas.
+
+Evidência: 25 testes do núcleo passaram. Builds Debug arm64 e Release universal passaram. As 46 verificações internas passaram em duas execuções isoladas consecutivas, incluindo cap sem key, hover sem pedido de ativação, transição cap→corpo, clique idempotente, recolhimento e preservação de dados. Uma execução enquanto o Release compilava falhou na antiga asserção de reversão rápida; as duas repetições sem compilação concorrente passaram. Isso permanece registrado como sensibilidade do teste temporal sob carga, sem atribuir uma causa definitiva.
+
+Geometria real observada: tela 1512 × 982 pt; corpo compacto 193 × 4 pt, topo em 949 pt; expandido 440 × 340 pt no mesmo topo; cap de 185 × 37 pt. Não houve acesso à câmera. [Relatório desta etapa](Validation/2026-11-09-camera.json).
+
+Limites: geometria e estado de NSWindow não certificam composição física do notch, mouse/trackpad, Spaces, fullscreen ou 60 FPS. Nenhuma nova medição de CPU/RAM foi feita. Acesso externo à UI continua indisponível neste ambiente.

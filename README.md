@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.3.0**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.4.0**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -37,6 +37,14 @@ O projeto Xcode está versionado. Após adicionar/remover arquivos Swift do apli
 - Presets Default, Minimal, Glass, Compact e Custom; importação/exportação JSON de Island, Dock e widgets.
 
 “Implementado” descreve código integrado; veja [ROADMAP.md](ROADMAP.md) para as verificações executadas e os fluxos ainda não validados interativamente. O timer é compartilhado entre Island e widgets e não sobrevive ao encerramento do aplicativo.
+
+## Island integrada à câmera (0.4)
+
+O posicionamento **Camera** fica centralizado no recorte físico do MacBook, com uma borda preta de 4 pontos quando recolhido. Ao passar o ponteiro, o conteúdo expande para baixo sem solicitar foco de teclado; clicar abre e prepara os controles. Sair recolhe após o atraso configurado, respeitando pin e edição. A câmera não é acessada nem exige permissão.
+
+O recorte é medido pelas áreas auxiliares públicas de `NSScreen`. Um painel estreito cobre somente esse espaço; os controles ficam abaixo da câmera e da barra de menus. Em uma tela sem notch, o fallback é uma faixa de 80 × 8 pontos abaixo da barra. Com apenas uma Island, a tela com notch tem preferência sobre um monitor externo principal.
+
+O modo Camera usa preto opaco para combinar com o recorte. Em **Dynamic Island → Placement → Floating**, continuam disponíveis deslocamentos, vidro, opacidade e temas armazenados. A atualização ativa Camera e hover uma única vez, preservando widgets, notas e preferências visuais; escolhas posteriores são respeitadas.
 
 ## Personalização 0.2
 

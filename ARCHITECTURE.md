@@ -19,7 +19,7 @@ O núcleo Foundation é uma biblioteca Swift Package separada. O executável usa
 
 ## Janelas e módulos
 
-`IslandManager` mantém a associação explícita entre cada painel e seu NSScreen. Largura, altura e posição são limitadas à área disponível. `safeAreaInsets` e `visibleFrame` evitam a câmera e os comandos da barra de menus; Macs sem notch usam o mesmo painel abaixo da barra. Sem a opção de tela cheia, `fullScreenAuxiliary` não é usado. A opção de vários monitores cria uma Island por tela; o estado expandido/módulo é compartilhado.
+`IslandManager` mantém a associação explícita entre cada painel e seu NSScreen. Largura, altura e posição são limitadas à área disponível. `safeAreaInsets` e `visibleFrame` delimitam o conteúdo abaixo da câmera e dos comandos da barra de menus; Macs sem notch usam uma faixa discreta abaixo da barra. Sem a opção de tela cheia, `fullScreenAuxiliary` não é usado. A opção de vários monitores cria uma Island por tela; o estado expandido/módulo é compartilhado.
 
 `IslandModule` fornece identidade e conteúdo; `IslandModuleRegistry` registra implementações por protocolo. Adicionar comportamento de módulo não exige alterar o gerenciador de janelas, embora adicionar uma identidade persistível exija estender `ModuleID` e os defaults/migração. Módulos são criados quando exibidos.
 
@@ -62,3 +62,11 @@ SurfaceMotionPlan no núcleo limita duração, atraso de revelação e fechament
 Dock e widgets preservam áreas/identidades durante animações, bloqueiam callbacks antigos e não gravam posições transitórias. SurfaceNoticeManager mostra erros de ação sem ativar a aplicação, permite foco intencional, pausa o deadline durante interação e encerra observadores/tarefas ao descartar.
 
 A validação distingue editor nativo preparado e binding de ativação/key concedidos pelo macOS. O relatório inclui contexto não certificado; não se altera a policy de produção para contornar limitações do ambiente. O modo Debug --profile-motion é uma carga finita isolada, não uma função de produção. A revisão por mudança está em UX_REVIEW.md.
+
+## Âncora da câmera (0.4)
+
+`CameraIslandGeometry` recebe retângulos globais e calcula a geometria sem AppKit. O gap validado entre `auxiliaryTopLeftArea` e `auxiliaryTopRightArea` determina centro e largura físicos. Coordenadas negativas são mantidas. Sem medições válidas, nenhum painel de nível statusBar é criado sobre menus.
+
+Em Camera, `CameraCapPanel` é estreito, preto, sem sombra e sem capacidade de key. O `IslandPanel` com controles continua no nível floating, abaixo do maior limite entre safe area e barra visível. Os dois alimentam o mesmo estado de hover/deadline; passar do cap ao conteúdo mantém a expansão. Abertura por clique é idempotente mesmo após hover. Ambos respeitam a opção explícita de fullScreenAuxiliary e são desmontados juntos.
+
+O cap permanece imóvel durante o resize do corpo. O estado compacto Camera não solicita demanda de dados, mesmo com a antiga opção de status compacto ativada. Preferências antigas decodificam Camera por padrão; uma migração única ativa hover sem descartar aparência, e preserva blobs incompatíveis sem gravá-los.

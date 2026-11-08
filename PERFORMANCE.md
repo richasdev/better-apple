@@ -63,3 +63,7 @@ Uma captura **Animation Hitches** de **15,90 s** concluiu durante a carga Debug 
 No Release 0.3.0 em repouso, Island compacta, Settings fechada e sem Dock/widgets/player habilitados: 20 leituras de ps, uma por segundo após 2 s iniciais, deram RSS médio **85,38 MiB**, máximo **85,61 MiB**, CPU média reportada **0,005%**, máxima **0,1%**. Trata-se de amostra curta e RSS, sem garantia de footprint físico, RAM em uso comum ou ausência de vazamentos.
 
 O modo `--validate --profile-motion` existe apenas em Debug, usa preferências isoladas e encerra após o trabalho finito. Não adiciona animações em repouso no aplicativo Release. Resultados completos em `Validation/2026-11-08-motion.json` e julgamento por alteração em `UX_REVIEW.md`.
+
+## Alteração 0.4 — câmera
+
+Nenhuma nova medição de CPU, RAM ou FPS foi realizada nesta etapa. O estado compacto Camera não mantém demanda dos módulos, mesmo se a preferência antiga de status compacto estiver ligada. O cap usa hover/clique por eventos e não adiciona polling, display link ou animação contínua. Testes de geometria/estado não demonstram cumprimento das metas de performance. Evidência funcional em [Validation/2026-11-09-camera.json](Validation/2026-11-09-camera.json).
