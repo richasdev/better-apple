@@ -19,12 +19,20 @@ struct IslandView: View {
     let pin: () -> Void
     let hover: (Bool) -> Void
     let toggle: () -> Void
+    let open: () -> Void
     let close: () -> Void
     let select: (ModuleID) -> Void
     let keyboardActive: () -> Bool
     @Namespace private var selectionAnimation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private var appearance: IslandAppearance { model.settings.island.visual }
+    private var cameraMode: Bool { model.settings.island.placementMode == .camera }
+    private var appearance: IslandAppearance {
+        var visual = model.settings.island.visual
+        if cameraMode {
+            visual.theme = .dark; visual.material = .solid; visual.opacity = 1; visual.borderVisible = false
+        }
+        return visual
+    }
     private var motionDisabled: Bool { reduceMotion || appearance.animationDuration == 0 }
     private var radius: CGFloat { state.expanded ? appearance.cornerRadius : min(appearance.cornerRadius, model.settings.island.minimal ? 6 : model.settings.island.height / 2) }
     var body: some View {
@@ -76,9 +84,11 @@ struct IslandView: View {
                 .accessibilityHidden(!state.expandedContentVisible)
             }
             if state.compactContentVisible {
-                Button(action: toggle) {
+                Button(action: open) {
                     Group {
-                        if model.settings.island.minimal {
+                        if cameraMode {
+                            Color.black.contentShape(Rectangle())
+                        } else if model.settings.island.minimal {
                             Capsule().fill(appearance.accent.color).frame(width: 28, height: 3)
                         } else if appearance.compactStatus {
                             IslandCompactContent(module: state.selected, timer: sources.timer, music: sources.music, system: sources.system, calendar: sources.calendar, calculator: sources.calculator, accent: appearance.accent.color)
@@ -93,7 +103,7 @@ struct IslandView: View {
                         }
                     }.contentShape(Rectangle()).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }.buttonStyle(.plain).accessibilityLabel("Expand \(state.selected.title)")
-                    .padding(model.settings.island.minimal ? 2 : 10)
+                    .padding(cameraMode ? 0 : (model.settings.island.minimal ? 2 : 10))
                     .transition(WorkspaceMotion.transition(reduceMotion: motionDisabled))
             }
         }

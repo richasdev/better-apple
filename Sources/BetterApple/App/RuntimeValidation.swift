@@ -16,6 +16,8 @@ enum RuntimeValidation {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("result.json"))
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("error.txt"))
             try await Task.sleep(for: .milliseconds(500))
+            app.model.settings.island.placementMode = .floating
+            app.island.applySettings()
             checks["settings window presented"] = NSApp.windows.contains { $0.title == "BetterApple" && $0.isVisible }
             captureWindows(to: directory, prefix: "settings")
             checks["safe calculator evaluates"] = try Calculator.evaluate("(24 + 18) / 6") == 7
@@ -102,6 +104,7 @@ enum RuntimeValidation {
             try await Task.sleep(for: .milliseconds(300))
             checks["compact island releases demand"] = app.island.activeModule == nil
             checks.merge(try await InteractionValidation.run(app, directory: directory)) { _, new in new }
+            checks.merge(try await CameraPlacementValidation.run(app, directory: directory)) { _, new in new }
         } catch { failure = error.localizedDescription }
         let passed = failure == nil && !checks.isEmpty && checks.values.allSatisfy { $0 }
         var result: [String: Any] = ["checks": checks, "passed": passed, "windowCount": NSApp.windows.count]

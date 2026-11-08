@@ -37,6 +37,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
     }
 
     func start() {
+        model.enableCameraExperienceIfNeeded(defaults: defaults)
         shortcuts.onTrigger = { [weak self] in self?.island.toggle() }
         registry.register(NativeIslandModule(id: .calculator) { [calculator] in AnyView(CalculatorModuleView(calculator: calculator)) })
         registry.register(NativeIslandModule(id: .calendar) { [calendar] in AnyView(CalendarModuleView(calendar: calendar)) })

@@ -10,6 +10,11 @@ final class IslandPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+final class CameraCapPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
 @MainActor
 final class IslandState: ObservableObject {
     @Published var expanded = false
@@ -26,7 +31,7 @@ final class IslandManager {
     private let model: AppModel
     private let registry: IslandModuleRegistry
     private let sources: IslandActivitySources
-    private var destinations: [(panel: IslandPanel, screen: NSScreen)] = []
+    private var destinations: [(panel: IslandPanel, screen: NSScreen, cap: CameraCapPanel?)] = []
     private var observations: Set<AnyCancellable> = []
     private var notificationObservers: [NSObjectProtocol] = []
     private var closeTask: Task<Void, Never>?
@@ -37,6 +42,7 @@ final class IslandManager {
     private var hoveredPanels = Set<ObjectIdentifier>()
     private var configuredDefault: ModuleID?
     private var configuredAllDisplays: Bool?
+    private var configuredPlacement: IslandPlacement?
     private var stopped = false
     var onVisibilityChange: (() -> Void)?
 
@@ -83,19 +89,21 @@ final class IslandManager {
     var activeModule: ModuleID? { model.settings.island.enabled && state.expanded && hasVisiblePanel ? state.selected : nil }
     var compactModule: ModuleID? {
         let settings = model.settings.island
-        return settings.enabled && !state.expanded && !settings.minimal && settings.visual.compactStatus && hasVisiblePanel ? state.selected : nil
+        return settings.placementMode == .floating && settings.enabled && !state.expanded && !settings.minimal && settings.visual.compactStatus && hasVisiblePanel ? state.selected : nil
     }
     func rebuild() {
         guard !stopped else { return }
         let restoreKeyboardFocus = destinations.contains { $0.panel.isKeyWindow }
         if !restoreKeyboardFocus { state.focusRequest = 0 }
         cancelPendingWork(); hoveredPanels.removeAll(); geometryDeadline = 0
-        destinations.forEach { $0.panel.orderOut(nil); $0.panel.contentView = nil; $0.panel.close() }; destinations.removeAll()
+        destinations.forEach { $0.cap?.orderOut(nil); $0.cap?.contentView = nil; $0.cap?.close(); $0.panel.orderOut(nil); $0.panel.contentView = nil; $0.panel.close() }; destinations.removeAll()
         let settings = model.settings.island
         configuredAllDisplays = settings.allDisplays
+        configuredPlacement = settings.placementMode
         guard settings.enabled else { collapse(); settleContent(); onVisibilityChange?(); return }
         updateSelection()
-        let screens = settings.allDisplays ? NSScreen.screens : Array(NSScreen.screens.prefix(1))
+        let preferred = settings.placementMode == .camera ? (NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.screens.first) : NSScreen.screens.first
+        let screens = settings.allDisplays ? NSScreen.screens : preferred.map { [$0] } ?? []
         guard !screens.isEmpty else { state.focusRequest = 0; settleContent(); onVisibilityChange?(); return }
         for screen in screens {
             let panel = IslandPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
@@ -104,21 +112,38 @@ final class IslandManager {
             let hosting = NSHostingView(rootView: IslandView(model: model, state: state, registry: registry, sources: sources,
                 pin: { [weak self] in self?.togglePin() },
                 hover: { [weak self, weak panel] inside in if let panel { self?.handlePointer(inside, panel: panel) } },
-                toggle: { [weak self] in self?.toggle() }, close: { [weak self] in self?.collapse() },
+                toggle: { [weak self] in self?.toggle() }, open: { [weak self] in self?.open() }, close: { [weak self] in self?.collapse() },
                 select: { [weak self] in self?.selectModule($0) }, keyboardActive: { [weak panel] in panel?.isKeyboardTarget == true }))
             hosting.sizingOptions = []
             panel.contentView = hosting
-            destinations.append((panel, screen))
+            var cap: CameraCapPanel?
+            if settings.placementMode == .camera, let frame = cameraLayout(for: screen).capFrame {
+                let trigger = CameraCapPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
+                trigger.isReleasedWhenClosed = false; trigger.isOpaque = false; trigger.backgroundColor = .clear
+                trigger.hasShadow = false; trigger.animationBehavior = .none; trigger.hidesOnDeactivate = false
+                trigger.level = .statusBar
+                let view = NSHostingView(rootView: CameraCapView(
+                    hover: { [weak self, weak trigger] inside in if let trigger { self?.handlePointer(inside, panel: trigger) } },
+                    expand: { [weak self] in self?.open() }))
+                view.sizingOptions = []; trigger.contentView = view; cap = trigger
+            }
+            destinations.append((panel, screen, cap))
         }
         applySettings()
-        destinations.forEach { $0.panel.orderFrontRegardless() }
+        destinations.forEach { $0.panel.orderFrontRegardless(); $0.cap?.orderFrontRegardless() }
         if restoreKeyboardFocus && state.expanded { requestKeyboardFocus() }
         onVisibilityChange?()
     }
     func toggle() {
         guard model.settings.island.enabled else { return }
         if state.expanded { collapse() }
-        else { state.expanded = true; requestKeyboardFocus() }
+        else { open() }
+    }
+    func open() {
+        guard model.settings.island.enabled else { return }
+        closeTask?.cancel(); closeTask = nil
+        state.expanded = true
+        requestKeyboardFocus()
     }
     func collapse() {
         closeTask?.cancel(); closeTask = nil
@@ -137,7 +162,7 @@ final class IslandManager {
     }
     private func requestKeyboardFocus() {
         guard state.expanded else { return }
-        let panel = destinations.first { $0.panel.frame.contains(NSEvent.mouseLocation) }?.panel ?? destinations.first?.panel
+        let panel = destinations.first { $0.panel.frame.contains(NSEvent.mouseLocation) || $0.cap?.frame.contains(NSEvent.mouseLocation) == true }?.panel ?? destinations.first?.panel
         guard let panel, panel.isOnActiveSpace else { return }
         destinations.forEach { $0.panel.isKeyboardTarget = $0.panel === panel }
         panel.acceptsKeyboardFocus = true; panel.makeKeyAndOrderFront(nil)
@@ -148,7 +173,7 @@ final class IslandManager {
         relinquishKeyboardFocus()
     }
     private func relinquishKeyboardFocus() {
-        for (panel, _) in destinations {
+        for (panel, _, _) in destinations {
             panel.isKeyboardTarget = false
             panel.acceptsKeyboardFocus = false
             if panel.isKeyWindow { panel.makeFirstResponder(nil); panel.resignKey() }
@@ -164,14 +189,15 @@ final class IslandManager {
         guard !stopped else { return }
         cancelPendingWork()
         let settings = model.settings.island
-        guard settings.enabled, !destinations.isEmpty, configuredAllDisplays == settings.allDisplays else { rebuild(); return }
+        guard settings.enabled, !destinations.isEmpty, configuredAllDisplays == settings.allDisplays, configuredPlacement == settings.placementMode else { rebuild(); return }
         updateSelection()
-        for (panel, _) in destinations {
-            panel.hasShadow = settings.visual.shadowVisible; panel.acceptsKeyboardFocus = state.expanded
+        for (panel, _, _) in destinations {
+            panel.hasShadow = settings.visual.shadowVisible && (state.expanded || settings.placementMode == .floating); panel.acceptsKeyboardFocus = state.expanded
             var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary]
             if settings.showInFullScreen { behavior.insert(.fullScreenAuxiliary) }
             if panel.collectionBehavior != behavior { panel.collectionBehavior = behavior }
         }
+        for destination in destinations { destination.cap?.collectionBehavior = destination.panel.collectionBehavior }
         settleContent(); layout(duration: 0); onVisibilityChange?(); scheduleAutoClose()
     }
     private func settleContent() {
@@ -202,8 +228,8 @@ final class IslandManager {
         }
         onVisibilityChange?()
     }
-    func handlePointer(_ inside: Bool, panel: IslandPanel) {
-        guard destinations.contains(where: { $0.panel === panel }), !stopped else { return }
+    func handlePointer(_ inside: Bool, panel: NSWindow) {
+        guard destinations.contains(where: { $0.panel === panel || $0.cap === panel }), !stopped else { return }
         if inside {
             hoveredPanels.insert(ObjectIdentifier(panel)); closeTask?.cancel(); closeTask = nil
             if model.settings.island.hoverToExpand && !state.expanded { state.focusRequest = 0; state.expanded = true }
@@ -220,20 +246,33 @@ final class IslandManager {
             let editing = self.destinations.contains { entry in
                 (entry.panel.isKeyWindow && (entry.panel.firstResponder as? NSTextView)?.isFieldEditor == true) || entry.panel.childWindows?.contains(where: \.isVisible) == true
             }
-            let pointerInside = self.destinations.contains { $0.panel.isVisible && $0.panel.isOnActiveSpace && $0.panel.frame.contains(NSEvent.mouseLocation) }
+            let pointerInside = self.destinations.contains { ($0.panel.isVisible && $0.panel.isOnActiveSpace && $0.panel.frame.contains(NSEvent.mouseLocation)) || ($0.cap?.isVisible == true && $0.cap?.isOnActiveSpace == true && $0.cap?.frame.contains(NSEvent.mouseLocation) == true) }
             guard self.hoveredPanels.isEmpty, !pointerInside, !editing, !self.state.pinned, self.model.settings.island.autoCloseDelay > 0 else { return }
             self.collapse()
         }
     }
+    private func cameraLayout(for screen: NSScreen) -> IslandWindowLayout {
+        CameraIslandGeometry.layout(screen: CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
+            safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea),
+            expanded: state.expanded, expandedWidth: model.settings.island.expandedWidth, expandedHeight: model.settings.island.expandedHeight)
+    }
     private func layout(duration: Double) {
         let settings = model.settings.island
-        for (panel, screen) in destinations {
+        for (panel, screen, cap) in destinations {
             let available = screen.visibleFrame
             let top = max(available.minY, min(available.maxY, screen.frame.maxY - screen.safeAreaInsets.top) - 4)
             let size = NSSize(width: min(available.width, state.expanded ? settings.expandedWidth : settings.width),
                               height: min(max(0, top - available.minY), state.expanded ? settings.expandedHeight : (settings.minimal ? 12 : settings.height)))
-            let rect = NSRect(x: min(available.maxX - size.width, max(available.minX, screen.frame.midX - size.width / 2 + settings.offsetX)),
+            let rect: NSRect
+            if settings.placementMode == .camera {
+                let geometry = cameraLayout(for: screen)
+                rect = geometry.bodyFrame
+                if let frame = geometry.capFrame { cap?.setFrame(frame, display: true) }
+            } else {
+                rect = NSRect(x: min(available.maxX - size.width, max(available.minX, screen.frame.midX - size.width / 2 + settings.offsetX)),
                               y: max(available.minY, top - size.height - settings.offsetY), width: size.width, height: size.height)
+            }
+            panel.hasShadow = settings.visual.shadowVisible && (state.expanded || settings.placementMode == .floating)
             guard panel.frame != rect else { continue }
             if duration > 0 {
                 geometryDeadline = max(geometryDeadline, ProcessInfo.processInfo.systemUptime + duration)
@@ -263,7 +302,7 @@ final class IslandManager {
     }
     func stop() {
         stopped = true; cancelPendingWork(); relinquishKeyboardFocus()
-        destinations.forEach { $0.panel.orderOut(nil); $0.panel.contentView = nil; $0.panel.close() }; destinations.removeAll()
+        destinations.forEach { $0.cap?.orderOut(nil); $0.cap?.contentView = nil; $0.cap?.close(); $0.panel.orderOut(nil); $0.panel.contentView = nil; $0.panel.close() }; destinations.removeAll()
         for observer in notificationObservers {
             NotificationCenter.default.removeObserver(observer); NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }

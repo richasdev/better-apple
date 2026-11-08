@@ -5,39 +5,65 @@ struct IslandSettingsView: View {
     @ObservedObject var model: AppModel
     @Environment(\.colorScheme) private var systemScheme
     private var visual: IslandAppearance { model.settings.island.visual }
+    private var cameraMode: Bool { model.settings.island.placementMode == .camera }
+    private var previewVisual: IslandAppearance {
+        var value = visual
+        if cameraMode { value.theme = .dark; value.material = .solid; value.opacity = 1; value.borderVisible = false }
+        return value
+    }
     var body: some View {
         Form {
+            Section("Position") {
+                Picker("Placement", selection: $model.settings.island.placementMode) {
+                    ForEach(IslandPlacement.allCases) { Text($0.title).tag($0) }
+                }
+                Text(cameraMode ? "Blends into the MacBook camera, centered at the top. Move the pointer to the small black edge below the camera to expand. On displays without a notch, a slim handle sits just below the menu bar." : "A separate floating surface below the menu bar, with adjustable offsets.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Live appearance") {
                 HStack {
                     Spacer()
+                    if cameraMode {
+                        VStack(spacing: 0) {
+                            UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 10, bottomTrailingRadius: 10, topTrailingRadius: 0)
+                                .fill(.black).frame(width: 140, height: 30)
+                            Capsule().fill(.black).frame(width: 148, height: 4).offset(y: -2)
+                        }.accessibilityLabel("Discreet black camera edge preview")
+                    } else {
                     Label("BetterApple", systemImage: "circle.lefthalf.filled")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(visual.accent.color)
                         .frame(width: 220, height: 42)
-                        .background(IslandSurface(appearance: visual, radius: min(visual.cornerRadius, 21)))
-                        .environment(\.colorScheme, visual.theme.colorScheme ?? systemScheme)
+                        .background(IslandSurface(appearance: previewVisual, radius: min(visual.cornerRadius, 21)))
+                        .environment(\.colorScheme, previewVisual.theme.colorScheme ?? systemScheme)
+                    }
                     Spacer()
                 }.padding(.vertical, 12).accessibilityLabel("Island appearance preview")
                 Picker("Theme", selection: $model.settings.island.visual.theme) {
                     ForEach(SurfaceTheme.allCases) { Text($0.title).tag($0) }
-                }
+                }.disabled(cameraMode)
                 Picker("Material", selection: $model.settings.island.visual.material) {
                     ForEach(SurfaceMaterial.allCases) { Text($0.title).tag($0) }
-                }
+                }.disabled(cameraMode)
                 Picker("Accent", selection: $model.settings.island.visual.accent) {
                     ForEach(WorkspaceAccent.allCases) { Label($0.title, systemImage: "circle.fill").foregroundStyle($0.color).tag($0) }
                 }
                 slider("Surface opacity", value: $model.settings.island.visual.opacity, range: 0.5...1, format: .percent)
+                    .disabled(cameraMode)
                 slider("Corner radius", value: $model.settings.island.visual.cornerRadius, range: 0...40)
                 Toggle("Border", isOn: $model.settings.island.visual.borderVisible)
+                    .disabled(cameraMode)
                 Toggle("Shadow", isOn: $model.settings.island.visual.shadowVisible)
                 Toggle("Module names below icons", isOn: $model.settings.island.visual.showModuleLabels)
+                if cameraMode { Text("Camera mode uses an opaque black surface to match the physical cutout. Your floating theme is kept for switching back.").font(.caption).foregroundStyle(.secondary) }
             }
             Section("Behavior") {
                 Toggle("Enable Dynamic Island", isOn: $model.settings.island.enabled)
                 Toggle("Expand on hover", isOn: $model.settings.island.hoverToExpand)
                 Toggle("Minimal appearance", isOn: $model.settings.island.minimal)
+                    .disabled(cameraMode)
                 Toggle("Live compact status", isOn: $model.settings.island.visual.compactStatus)
+                    .disabled(cameraMode)
                 Text("Live compact status shows the selected module’s available data and keeps only that service active while the Island is visible. Turn it off for the lowest idle activity.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show on every display", isOn: $model.settings.island.allDisplays)
@@ -49,11 +75,15 @@ struct IslandSettingsView: View {
             }
             Section("Geometry") {
                 slider("Compact width", value: $model.settings.island.width, range: 140...500)
+                    .disabled(cameraMode)
                 slider("Compact height", value: $model.settings.island.height, range: 24...64)
+                    .disabled(cameraMode)
                 slider("Expanded width", value: $model.settings.island.expandedWidth, range: 340...650)
                 slider("Expanded height", value: $model.settings.island.expandedHeight, range: 240...600)
                 slider("Horizontal offset", value: $model.settings.island.offsetX, range: -500...500)
+                    .disabled(cameraMode)
                 slider("Distance below menu bar", value: $model.settings.island.offsetY, range: 0...200)
+                    .disabled(cameraMode)
             }
             Section("Enabled modules") {
                 ForEach(ModuleID.allCases) { module in

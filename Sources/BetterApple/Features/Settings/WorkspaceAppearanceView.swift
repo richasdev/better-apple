@@ -30,6 +30,10 @@ struct WorkspaceAppearanceView: View {
                 Label(model.settings.appearance == .custom ? "Custom appearance" : "Current preset: \(model.settings.appearance.title)", systemImage: "slider.horizontal.3").font(.headline)
                 Text("Presets adjust the Island and Dock appearance. Your applications, enabled modules, positions and widget content stay as configured. Fine-tune surfaces in Dynamic Island, Dock and Widgets.")
                     .font(.callout).foregroundStyle(.secondary)
+                if model.settings.island.placementMode == .camera {
+                    Text("Camera placement stays black to blend with the notch. Choose floating placement in Dynamic Island for light themes and glass surfaces.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Text("Presets are applied immediately. You can export your complete configuration from General before trying a new look.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(28)
