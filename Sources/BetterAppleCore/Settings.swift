@@ -21,6 +21,12 @@ public enum AppearancePreset: String, Codable, CaseIterable, Identifiable, Senda
     public var title: String { rawValue.capitalized }
 }
 
+public enum IslandPlacement: String, Codable, CaseIterable, Identifiable, Sendable {
+    case camera, floating
+    public var id: String { rawValue }
+    public var title: String { self == .camera ? "At the camera" : "Floating below the menu bar" }
+}
+
 public struct IslandSettings: Codable, Equatable, Sendable {
     public var enabled = true
     public var width = 220.0
@@ -36,6 +42,11 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var minimal = false
     public var modules = ModuleID.allCases
     public var defaultModule: ModuleID = .calculator
+    public var placement: IslandPlacement?
+    public var placementMode: IslandPlacement {
+        get { placement ?? .camera }
+        set { placement = newValue }
+    }
     // Optional storage preserves direct Codable imports created before visual preferences existed.
     public var appearance: IslandAppearance?
     public var visual: IslandAppearance {
