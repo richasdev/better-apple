@@ -4,7 +4,7 @@ import Combine
 import BetterAppleCore
 
 @MainActor
-final class AppCoordinator: NSObject, NSWindowDelegate {
+final class AppCoordinator: NSObject, NSWindowDelegate, ObservableObject {
     let model: AppModel
     let calendar = CalendarService()
     let music = MusicService()
@@ -13,6 +13,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
     let calculator: CalculatorService
     let dock: DockManager
     let shortcuts: GlobalShortcutService
+    let notices = SurfaceNoticeManager()
     let registry = IslandModuleRegistry()
     private let defaults: UserDefaults
     lazy var widgets = WidgetManager(calendar: calendar, music: music, system: system, timer: timer, calculator: calculator, defaults: defaults)
@@ -21,6 +22,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
     private var settingsWindow: NSWindow?
     private var subscriptions: Set<AnyCancellable> = []
     private var observers: [NSObjectProtocol] = []
+    @Published var lastSettingsSection = "General"
     private var sleeping = false
     private var applyingPreferences = false
 
@@ -49,6 +51,9 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         dock.$preferences.dropFirst().sink { [weak self] _ in
             guard let self, !self.applyingPreferences, self.model.settings.appearance != .custom else { return }
             self.model.settings.appearance = .custom
+        }.store(in: &subscriptions)
+        dock.$errorMessage.removeDuplicates().compactMap { $0 }.sink { [weak self] message in
+            self?.notices.show(message, openSettings: { [weak self] in self?.showDockSettings() })
         }.store(in: &subscriptions)
         widgets.$widgets.dropFirst().sink { [weak self] _ in
             Task { @MainActor in self?.updateServiceDemand() }
@@ -86,7 +91,9 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
     @objc private func toggleIsland() { island.toggle() }
     @objc private func editWidgets() { widgets.editing.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }
+    func showDockSettings() { lastSettingsSection = "Dock"; showSettings() }
     @objc func showSettings() {
+        island.yieldKeyboardToSettings()
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 880, height: 650), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
             window.title = "BetterApple"; window.minSize = NSSize(width: 760, height: 540)
@@ -109,6 +116,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate {
         timer.setVisible(active == .timer || kinds.contains(.timer))
     }
     func stop() {
+        notices.dismiss(animated: false)
         shortcuts.stop()
         widgets.flushPersistence()
         island.stop(); calendar.stop(); music.disconnect(); system.stop(); timer.setVisible(false); widgets.hide()

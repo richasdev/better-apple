@@ -23,7 +23,8 @@ struct WorkspaceAppearanceView: View {
                                 .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
                                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(model.settings.appearance == preset ? model.settings.island.visual.accent.color : Color.secondary.opacity(0.2), lineWidth: model.settings.appearance == preset ? 2 : 1))
                                 .contentShape(RoundedRectangle(cornerRadius: 14))
-                        }.buttonStyle(.plain).accessibilityLabel("Apply \(preset.title) preset")
+                        }.buttonStyle(PresetCardButtonStyle()).accessibilityLabel("Apply \(preset.title) preset")
+                            .accessibilityAddTraits(model.settings.appearance == preset ? .isSelected : [])
                     }
                 }
                 Label(model.settings.appearance == .custom ? "Custom appearance" : "Current preset: \(model.settings.appearance.title)", systemImage: "slider.horizontal.3").font(.headline)
@@ -51,5 +52,25 @@ struct WorkspaceAppearanceView: View {
         case .compact: return "Tighter geometry for a focused workspace."
         case .custom: return "Your individual adjustments."
         }
+    }
+}
+
+private struct PresetCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { PresetCardBody(configuration: configuration) }
+}
+private struct PresetCardBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var hovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isFocused) private var focused
+    var body: some View {
+        configuration.label
+            .overlay(RoundedRectangle(cornerRadius: 14).fill(.primary.opacity(hovered ? 0.025 : 0)))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.accentColor.opacity(focused ? 0.9 : 0), lineWidth: 2))
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .offset(y: hovered && !configuration.isPressed && !reduceMotion ? -1 : 0)
+            .onHover { hovered = $0 }
+            .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: hovered)
+            .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: configuration.isPressed)
     }
 }

@@ -19,10 +19,17 @@ final class WidgetManager: ObservableObject {
         didSet {
             scheduleSave()
             // Note edits and SwiftUI appearance changes do not require touching AppKit windows.
-            if oldValue.map(WidgetWindowState.init) != widgets.map(WidgetWindowState.init) { refresh() }
+            if oldValue.map(WidgetWindowState.init) != widgets.map(WidgetWindowState.init) { refresh(animated: userInitiatedChange) }
         }
     }
-    @Published var editing = false { didSet { refresh() } }
+    @Published var editing = false {
+        didSet {
+            guard editing != oldValue else { return }
+            refresh()
+            if editing { panels.values.forEach { $0.orderFrontRegardless() } }
+        }
+    }
+    @Published private(set) var layoutMessage: String?
     @Published var layoutPreferences: WidgetLayoutPreferences {
         didSet {
             if let data = try? JSONEncoder().encode(layoutPreferences) { defaults.set(data, forKey: "widgets.editing") }
@@ -35,6 +42,9 @@ final class WidgetManager: ObservableObject {
     let calculator: CalculatorService
     private let defaults: UserDefaults
     private var panels: [UUID: NSPanel] = [:]
+    private var retiringPanels: [ObjectIdentifier: NSPanel] = [:]
+    private var animatingFrames = Set<UUID>()
+    private var frameGenerations: [UUID: Int] = [:]
     private var delegates: [UUID: WidgetWindowDelegate] = [:]
     private var screenObserver: NSObjectProtocol?
     private var terminationObserver: NSObjectProtocol?
@@ -43,6 +53,7 @@ final class WidgetManager: ObservableObject {
     private var visibilityUpdateQueued = false
     private var updating = false
     private var suspended = false
+    private var userInitiatedChange = false
     var onVisibilityChange: (() -> Void)?
     var activeKinds: Set<DesktopWidgetKind> {
         guard !suspended else { return [] }
@@ -82,11 +93,11 @@ final class WidgetManager: ObservableObject {
         guard widgets.count < 30 else { return }
         var item = WidgetConfiguration(kind: kind)
         if let screen = NSScreen.main { item.x = screen.visibleFrame.minX + 60 + Double(widgets.count % 5) * 30; item.y = screen.visibleFrame.maxY - 300 - Double(widgets.count % 5) * 30 }
-        widgets.append(item)
+        performUserChange { widgets.append(item) }
     }
-    func remove(id: UUID) { widgets.removeAll { $0.id == id } }
+    func remove(id: UUID) { performUserChange { widgets.removeAll { $0.id == id } } }
     func setAllVisible(_ visible: Bool) {
-        widgets = widgets.map { item in var updated = item; updated.visible = visible; return updated }
+        performUserChange { widgets = widgets.map { item in var updated = item; updated.visible = visible; return updated } }
     }
     @discardableResult func duplicate(id: UUID) -> UUID? {
         guard widgets.count < 30, let original = widgets.first(where: { $0.id == id }) else { return nil }
@@ -94,7 +105,7 @@ final class WidgetManager: ObservableObject {
         copy.id = UUID(); copy.x += 24; copy.y -= 24; copy.visible = true
         let frame = constrainedFrame(NSRect(x: copy.x, y: copy.y, width: copy.width, height: copy.height))
         copy.x = frame.minX; copy.y = frame.minY
-        widgets.append(copy)
+        performUserChange { widgets.append(copy) }
         return copy.id
     }
     func center(id: UUID) {
@@ -108,14 +119,24 @@ final class WidgetManager: ObservableObject {
         let available = screen.visibleFrame.insetBy(dx: 24, dy: 24)
         var x = available.minX, y = available.maxY, rowHeight = 0.0
         var arranged = widgets
+        var fitted = 0
+        var overflow = false
         for index in arranged.indices where arranged[index].visible {
             let width = arranged[index].width, height = arranged[index].height
             if x + width > available.maxX && x > available.minX { x = available.minX; y -= rowHeight + 20; rowHeight = 0 }
-            if y - height < available.minY { y = available.maxY; x = available.minX }
+            // Never wrap over widgets already placed.
+            if y - height < available.minY || width > available.width || overflow { overflow = true; continue }
             arranged[index].x = x; arranged[index].y = y - height
             x += width + 20; rowHeight = max(rowHeight, height)
+            fitted += 1
         }
-        widgets = arranged
+        let visibleCount = arranged.filter(\.visible).count
+        guard !overflow else {
+            layoutMessage = "These \(visibleCount) widgets do not fit on this display. Resize or hide a widget and try again. Your positions have not changed."
+            return
+        }
+        layoutMessage = "Arranged \(fitted) widgets on this display."
+        performUserChange { widgets = arranged }
     }
     func finishEditingFrame(id: UUID) {
         guard editing, layoutPreferences.snapToGrid, let panel = panels[id] else { return }
@@ -125,21 +146,18 @@ final class WidgetManager: ObservableObject {
                                              y: (frame.minY / grid).rounded() * grid,
                                              width: min(800, max(220, (frame.width / grid).rounded() * grid)),
                                              height: min(800, max(160, (frame.height / grid).rounded() * grid))))
-        panel.setFrame(snapped, display: true)
         persistFrame(snapped, id: id)
+        movePanel(panel, to: snapped, id: id, animated: true)
     }
     func show() { suspended = false; refresh() }
     func hide() { suspended = true; refresh() }
-    func refresh() {
+    func refresh(animated: Bool = false) {
         guard !updating else { return }
         updating = true
         defer { updating = false; scheduleVisibilityChange() }
         let visibleIDs = Set(suspended ? [] : widgets.filter(\.visible).map(\.id))
         for id in Array(panels.keys) where !visibleIDs.contains(id) {
-            panels[id]?.orderOut(nil)
-            panels[id]?.contentView = nil
-            panels[id]?.delegate = nil
-            panels[id]?.close()
+            if let panel = panels[id] { retirePanel(panel, id: id, animated: animated && !suspended) }
             panels.removeValue(forKey: id); delegates.removeValue(forKey: id)
         }
         for item in widgets where visibleIDs.contains(item.id) {
@@ -154,6 +172,7 @@ final class WidgetManager: ObservableObject {
                 panel.standardWindowButton(.zoomButton)?.isHidden = true
                 panel.backgroundColor = .clear; panel.isOpaque = false
                 panel.level = .normal
+                panel.hidesOnDeactivate = false
                 panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
                 panel.isReleasedWhenClosed = false
                 panel.minSize = NSSize(width: 220, height: 160)
@@ -166,19 +185,37 @@ final class WidgetManager: ObservableObject {
             if panel.styleMask != mask { panel.styleMask = mask }
             panel.hasShadow = item.shadow
             let target = constrainedFrame(NSRect(x: item.x, y: item.y, width: item.width, height: item.height))
-            if !NSEqualRects(panel.frame, target) { panel.setFrame(target, display: true) }
+            if !NSEqualRects(panel.frame, target) { movePanel(panel, to: target, id: item.id, animated: animated && panel.isVisible) }
             if panel.contentView == nil { panel.contentView = NSHostingView(rootView: DesktopWidgetView(manager: self, id: item.id)) }
-            if !panel.isVisible { panel.orderFrontRegardless() }
+            if !panel.isVisible {
+                let animate = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                panel.alphaValue = animate ? 0 : 1
+                // Startup/wake restores desktop widgets behind the user's current app.
+                // Explicit add/show actions still bring the requested widget forward.
+                if animated { panel.orderFrontRegardless() } else { panel.orderBack(nil) }
+                if animate {
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = WorkspaceMotion.standard
+                        context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: true)
+                        panel.animator().alphaValue = 1
+                    }
+                }
+            }
         }
     }
     private func constrainedFrame(_ rect: NSRect) -> NSRect {
-        guard let screen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(rect) }) ?? NSScreen.main else { return rect }
+        func intersectionArea(_ screen: NSScreen) -> CGFloat {
+            let overlap = screen.visibleFrame.intersection(rect)
+            return overlap.isNull ? 0 : max(0, overlap.width) * max(0, overlap.height)
+        }
+        let best = NSScreen.screens.max { intersectionArea($0) < intersectionArea($1) }
+        guard let screen = best.flatMap({ intersectionArea($0) > 0 ? $0 : nil }) ?? NSScreen.main else { return rect }
         let available = screen.visibleFrame
         let size = NSSize(width: min(rect.width, available.width), height: min(rect.height, available.height))
         return NSRect(x: max(available.minX, min(rect.minX, available.maxX - size.width)), y: max(available.minY, min(rect.minY, available.maxY - size.height)), width: size.width, height: size.height)
     }
     func persistFrame(_ frame: NSRect, id: UUID) {
-        guard !updating, let index = widgets.firstIndex(where: { $0.id == id }) else { return }
+        guard !updating, !animatingFrames.contains(id), let index = widgets.firstIndex(where: { $0.id == id }) else { return }
         updating = true
         var copy = widgets
         copy[index].x = frame.minX; copy[index].y = frame.minY; copy[index].width = frame.width; copy[index].height = frame.height
@@ -187,7 +224,50 @@ final class WidgetManager: ObservableObject {
     }
     func update(_ id: UUID, transform: (inout WidgetConfiguration) -> Void) {
         guard let index = widgets.firstIndex(where: { $0.id == id }) else { return }
-        transform(&widgets[index])
+        performUserChange { transform(&widgets[index]) }
+    }
+    private func performUserChange(_ change: () -> Void) {
+        let previous = userInitiatedChange
+        userInitiatedChange = true
+        defer { userInitiatedChange = previous }
+        change()
+    }
+    private func movePanel(_ panel: NSPanel, to target: NSRect, id: UUID, animated: Bool) {
+        frameGenerations[id, default: 0] += 1
+        let generation = frameGenerations[id]!
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            animatingFrames.remove(id)
+            panel.setFrame(target, display: true)
+            return
+        }
+        animatingFrames.insert(id)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = WorkspaceMotion.standard
+            context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: true)
+            panel.animator().setFrame(target, display: true)
+        } completionHandler: { [weak self, weak panel] in
+            Task { @MainActor in
+                guard let self, let panel, self.panels[id] === panel, self.frameGenerations[id] == generation else { return }
+                self.animatingFrames.remove(id)
+            }
+        }
+    }
+    private func retirePanel(_ panel: NSPanel, id: UUID, animated: Bool) {
+        panel.delegate = nil
+        animatingFrames.remove(id); frameGenerations.removeValue(forKey: id)
+        let identity = ObjectIdentifier(panel)
+        let close = { [weak self, panel] in
+            panel.orderOut(nil); panel.contentView = nil; panel.close()
+            self?.retiringPanels.removeValue(forKey: identity)
+        }
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { close(); return }
+        // Keep the old panel only for this finite fade; a rapid re-show creates an independent panel.
+        retiringPanels[identity] = panel
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = WorkspaceMotion.quick
+            context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: false)
+            panel.animator().alphaValue = 0
+        } completionHandler: { Task { @MainActor in close() } }
     }
     private func scheduleSave() {
         saveWork?.cancel()

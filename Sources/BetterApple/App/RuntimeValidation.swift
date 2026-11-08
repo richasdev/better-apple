@@ -1,15 +1,20 @@
 #if DEBUG
 import AppKit
+import Darwin
 import BetterAppleCore
 
 /// Exercises the real managers without Calendar/Automation prompts or changing the user's layout.
 @MainActor
 enum RuntimeValidation {
     static func run(_ app: AppCoordinator) async {
+        if CommandLine.arguments.contains("--profile-motion") { await runMotionProfile(app); return }
         let directory = URL(fileURLWithPath: "/tmp/BetterApple-validation", isDirectory: true)
         var checks: [String: Bool] = [:]
+        var failure: String?
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent("result.json"))
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent("error.txt"))
             try await Task.sleep(for: .milliseconds(500))
             checks["settings window presented"] = NSApp.windows.contains { $0.title == "BetterApple" && $0.isVisible }
             captureWindows(to: directory, prefix: "settings")
@@ -38,6 +43,7 @@ enum RuntimeValidation {
             app.calculator.historyEnabled = true
             app.calculator.commit()
             checks["shared calculator commits optional history"] = app.calculator.history.count == 1 && app.widgets.calculator === app.calculator
+            try await Task.sleep(for: .milliseconds(350))
             captureWindows(to: directory, prefix: "island")
             app.dock.show()
             checks["dock resolves real applications"] = !app.dock.applications.isEmpty
@@ -95,12 +101,33 @@ enum RuntimeValidation {
             app.island.collapse()
             try await Task.sleep(for: .milliseconds(300))
             checks["compact island releases demand"] = app.island.activeModule == nil
-            let result: [String: Any] = ["checks": checks, "passed": checks.values.allSatisfy { $0 }, "windowCount": NSApp.windows.count]
+            checks.merge(try await InteractionValidation.run(app, directory: directory)) { _, new in new }
+        } catch { failure = error.localizedDescription }
+        let passed = failure == nil && !checks.isEmpty && checks.values.allSatisfy { $0 }
+        var result: [String: Any] = ["checks": checks, "passed": passed, "windowCount": NSApp.windows.count]
+        if let failure { result["error"] = failure }
+        if let context = try? Data(contentsOf: directory.appendingPathComponent("interaction-context.json")), let decoded = try? JSONSerialization.jsonObject(with: context) { result["interactionContext"] = decoded }
+        do {
             try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("result.json"))
-            print("Runtime validation: \(checks.values.allSatisfy { $0 } ? "PASS" : "FAIL") — \(directory.path)")
-        } catch {
-            try? Data(error.localizedDescription.utf8).write(to: directory.appendingPathComponent("error.txt"))
-        }
+        } catch { app.stop(); print("Runtime validation could not save results: \(error)"); exit(EXIT_FAILURE) }
+        print("Runtime validation: \(passed ? "PASS" : "FAIL") — \(directory.path)")
+        if !passed { app.stop(); exit(EXIT_FAILURE) }
+        NSApp.terminate(nil)
+    }
+    private static func runMotionProfile(_ app: AppCoordinator) async {
+        let directory = URL(fileURLWithPath: "/tmp/BetterApple-motion-profile", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            app.model.settings.island.showInFullScreen = true
+            app.island.applySettings()
+            try await Task.sleep(for: .seconds(2))
+            try await InteractionValidation.profileMotion(app)
+            let result: [String: Any] = ["completed": true, "cycles": 20,
+                "reduceMotion": NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                "scope": "finite native window/module workload; no implied frame-rate guarantee"]
+            try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("workload.json"))
+            try await Task.sleep(for: .seconds(3))
+        } catch { app.stop(); print("Motion workload failed: \(error)"); exit(EXIT_FAILURE) }
         NSApp.terminate(nil)
     }
     private static func captureWindows(to directory: URL, prefix: String) {

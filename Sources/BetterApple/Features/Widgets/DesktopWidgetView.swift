@@ -6,19 +6,37 @@ struct DesktopWidgetView: View {
     @ObservedObject var manager: WidgetManager
     let id: UUID
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    private var configuration: WidgetConfiguration? { manager.widgets.first { $0.id == id } }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var lastKnownConfiguration: WidgetConfiguration?
+    @State private var confirmingRemoval = false
+    init(manager: WidgetManager, id: UUID) {
+        self.manager = manager; self.id = id
+        _lastKnownConfiguration = State(initialValue: manager.widgets.first { $0.id == id })
+    }
+    // Retain the last presentation only for the finite removal fade, avoiding an empty flash.
+    private var configuration: WidgetConfiguration? { manager.widgets.first { $0.id == id } ?? lastKnownConfiguration }
     var body: some View {
         if let item = configuration {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Label(item.displayTitle, systemImage: item.kind.symbol).font(.system(.caption, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1)
+                    Label(item.displayTitle, systemImage: item.kind.symbol).font(.system(.caption, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1).accessibilityAddTraits(.isHeader)
                     Spacer()
                     if manager.editing {
-                        WidgetDragHandle(onFinish: { manager.finishEditingFrame(id: id) }).frame(width: 18, height: 18).help("Drag to move widget")
-                        Button { manager.update(id) { $0.visible = false } } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).accessibilityLabel("Hide widget")
+                        WidgetDragHandle(onFinish: { manager.finishEditingFrame(id: id) }).frame(width: 24, height: 24).help("Drag to move widget")
+                            .transition(WorkspaceMotion.transition(reduceMotion: reduceMotion))
+                        Button { manager.update(id) { $0.visible = false } } label: { Image(systemName: "xmark") }
+                            .buttonStyle(SurfaceButtonStyle()).accessibilityLabel("Hide widget")
+                            .transition(WorkspaceMotion.transition(reduceMotion: reduceMotion))
                     }
+                }.frame(height: 28)
+                    .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: manager.editing)
+                if [.analogClock, .notes, .calculator].contains(item.kind) {
+                    content(item)
+                } else {
+                    ScrollView {
+                        content(item).frame(maxWidth: .infinity, alignment: .leading)
+                    }.scrollIndicators(.automatic)
                 }
-                content(item)
                 Spacer(minLength: 0)
             }
             .padding(20)
@@ -31,9 +49,15 @@ struct DesktopWidgetView: View {
                 }
             }
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(manager.editing ? Color.accentColor.opacity(0.7) : Color.primary.opacity(item.border ? 0.12 : 0), lineWidth: manager.editing ? 2 : 1))
+            .clipShape(RoundedRectangle(cornerRadius: 22))
             .padding(2)
             .preferredColorScheme(item.theme == .automatic ? nil : item.theme == .dark ? .dark : .light)
             .tint(item.accent?.color ?? Color.accentColor)
+            .accentColor(item.accent?.color ?? Color.accentColor)
+            .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: manager.editing)
+            .onReceive(manager.$widgets) { widgets in
+                if let current = widgets.first(where: { $0.id == id }) { lastKnownConfiguration = current }
+            }
             .contextMenu {
                 Button(manager.editing ? "Finish editing" : "Edit layout", systemImage: "slider.horizontal.3") { manager.editing.toggle() }
                 Button("Bring forward", systemImage: "square.3.layers.3d.top.filled") { manager.bringForward(id: id) }
@@ -41,8 +65,15 @@ struct DesktopWidgetView: View {
                 Button("Duplicate widget", systemImage: "plus.square.on.square") { manager.duplicate(id: id) }.disabled(manager.widgets.count >= 30)
                 Divider()
                 Button("Hide widget", systemImage: "eye.slash") { manager.update(id) { $0.visible = false } }
-                Button("Remove widget", systemImage: "trash", role: .destructive) { manager.remove(id: id) }
+                Button("Remove widget", systemImage: "trash", role: .destructive) {
+                    if item.kind == .notes && !item.note.isEmpty { confirmingRemoval = true }
+                    else { manager.remove(id: id) }
+                }
             }
+            .confirmationDialog("Remove this note widget?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
+                Button("Remove note", role: .destructive) { manager.remove(id: id) }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("The note’s contents will be deleted from this layout.") }
         }
     }
     @ViewBuilder private func content(_ item: WidgetConfiguration) -> some View {
@@ -146,7 +177,6 @@ private struct EventsWidget: View {
             } else if service.events.isEmpty {
                 Text("No upcoming events").foregroundStyle(.secondary)
             } else {
-                ScrollView {
                   VStack(alignment: .leading, spacing: 12) {
                    ForEach(service.events.prefix(options.eventLimit)) { event in
                     HStack(alignment: .top) {
@@ -158,7 +188,6 @@ private struct EventsWidget: View {
                     }.fixedSize(horizontal: false, vertical: true)
                    }
                   }
-                }
             }
             Button("Open Calendar") { service.openCalendar() }
         }
@@ -169,6 +198,8 @@ private struct MusicWidget: View {
     @ObservedObject var service: MusicService
     let options: WidgetDisplayOptions
     let fontSize: Double
+    @State private var localPosition = 0.0
+    @State private var isScrubbing = false
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let track = service.track {
@@ -185,18 +216,33 @@ private struct MusicWidget: View {
                     }
                 }
                 if options.showProgress, track.duration > 0 {
-                    Slider(value: Binding(get: { min(track.duration, max(0, track.position)) }, set: { service.seek(to: $0) }), in: 0...track.duration).accessibilityLabel("Playback position")
+                    Slider(value: $localPosition, in: 0...track.duration, onEditingChanged: { editing in
+                        isScrubbing = editing
+                        if !editing { service.seek(to: localPosition) }
+                    }).accessibilityLabel("Playback position")
                 }
                 HStack(spacing: 28) {
                     Button { service.previous() } label: { Image(systemName: "backward.fill") }.accessibilityLabel("Previous track")
                     Button { service.playPause() } label: { Image(systemName: track.isPlaying ? "pause.fill" : "play.fill") }.accessibilityLabel(track.isPlaying ? "Pause" : "Play")
                     Button { service.next() } label: { Image(systemName: "forward.fill") }.accessibilityLabel("Next track")
-                }.buttonStyle(.plain).font(.title3).frame(maxWidth: .infinity)
+                }.buttonStyle(SurfaceButtonStyle()).font(.title3).frame(maxWidth: .infinity)
             } else {
                 Text(service.errorMessage ?? "Connect a running player to control your music.").font(.callout).foregroundStyle(.secondary)
-                HStack { ForEach(service.availablePlayers) { player in Button(player.title) { service.connect(to: player) } } }
+                ViewThatFits(in: .horizontal) {
+                    HStack { playerButtons }
+                    VStack(alignment: .leading) { playerButtons }
+                }
             }
         }
+        .onAppear { synchronizePosition() }
+        .onChange(of: service.track) { _, _ in if !isScrubbing { synchronizePosition() } }
+    }
+    @ViewBuilder private var playerButtons: some View {
+        ForEach(service.availablePlayers) { player in Button(player.title) { service.connect(to: player) } }
+    }
+    private func synchronizePosition() {
+        guard let track = service.track else { localPosition = 0; return }
+        localPosition = min(max(0, track.position), max(0, track.duration))
     }
 }
 
@@ -241,10 +287,14 @@ private struct TimerWidget: View {
     @ObservedObject var service: TimerService
     let options: WidgetDisplayOptions
     let fontSize: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if !service.label.isEmpty { Text(service.label).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-            Text(String(format: "%02d:%02d", Int(ceil(service.remaining)) / 60, Int(ceil(service.remaining)) % 60)).font(.system(size: fontSize, weight: .light, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+            Text(Duration.seconds(max(0, service.remaining.rounded(.up))).formatted(.time(pattern: service.remaining >= 3600 ? .hourMinuteSecond : .minuteSecond)))
+                .font(.system(size: fontSize, weight: .light, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                .contentTransition(reduceMotion ? .identity : .numericText(countsDown: true))
+                .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: Int(ceil(service.remaining)))
             if options.showProgress && (service.isRunning || service.isPaused) { ProgressView(value: service.progress).accessibilityLabel("Timer progress") }
             if service.isRunning || service.isPaused {
                 HStack { Button(service.isPaused ? "Resume" : "Pause") { if service.isPaused { service.resume() } else { service.pause() } }; Button("Cancel") { service.cancel() } }
@@ -252,7 +302,9 @@ private struct TimerWidget: View {
                 Label("Timer complete", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 HStack { Button("Restart") { service.restart() }; Button("Dismiss") { service.dismissCompletion() } }
             } else {
-                HStack { ForEach(service.presetMinutes.prefix(4), id: \.self) { minutes in Button("\(minutes)m") { service.start(seconds: Double(minutes * 60)) } } }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack { ForEach(service.presetMinutes.prefix(4), id: \.self) { minutes in Button("\(minutes)m") { service.start(seconds: Double(minutes * 60)) } } }
+                }
             }
         }
     }

@@ -30,6 +30,7 @@ struct SettingsRootView: View {
     let coordinator: AppCoordinator
     @State private var selection: SettingsSection? = .general
     @State private var loginError: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 0) {
@@ -47,11 +48,29 @@ struct SettingsRootView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text((selection ?? .general).rawValue).font(.system(size: 27, weight: .bold)).padding(.horizontal, 28).padding(.top, 24).padding(.bottom, 8)
                 content
+                    .id(selection ?? .general)
+                    .transition(WorkspaceMotion.transition(reduceMotion: reduceMotion))
+                    .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.content), value: selection)
                 if let error = model.persistenceError {
-                    Text(error).font(.caption).foregroundStyle(.red).padding()
+                    HStack(alignment: .top, spacing: 10) {
+                        Label(error, systemImage: "exclamationmark.triangle.fill").font(.callout).textSelection(.enabled)
+                        Spacer(minLength: 8)
+                        Button { model.persistenceError = nil } label: { Image(systemName: "xmark") }
+                            .buttonStyle(SurfaceButtonStyle()).accessibilityLabel("Dismiss error")
+                    }
+                    .foregroundStyle(.red).padding(12)
+                    .background(.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 10)).padding(16)
+                    .transition(WorkspaceMotion.transition(reduceMotion: reduceMotion))
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }.tint(model.settings.island.visual.accent.color)
+            .accentColor(model.settings.island.visual.accent.color)
+            .onReceive(coordinator.$lastSettingsSection.removeDuplicates()) { name in
+                guard let section = SettingsSection(rawValue: name), selection != section else { return }
+                selection = section
+            }
+            .onChange(of: selection) { _, selected in coordinator.lastSettingsSection = (selected ?? .general).rawValue }
+            .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.content), value: model.persistenceError)
     }
     @ViewBuilder private var content: some View {
         switch selection ?? .general {

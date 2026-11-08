@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import BetterAppleCore
 
 @MainActor
@@ -18,12 +19,18 @@ struct IslandView: View {
     let pin: () -> Void
     let hover: (Bool) -> Void
     let toggle: () -> Void
+    let close: () -> Void
+    let select: (ModuleID) -> Void
+    let keyboardActive: () -> Bool
+    @Namespace private var selectionAnimation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var appearance: IslandAppearance { model.settings.island.visual }
+    private var motionDisabled: Bool { reduceMotion || appearance.animationDuration == 0 }
     private var radius: CGFloat { state.expanded ? appearance.cornerRadius : min(appearance.cornerRadius, model.settings.island.minimal ? 6 : model.settings.island.height / 2) }
     var body: some View {
-        VStack(spacing: 0) {
-            if state.expanded {
+        ZStack(alignment: .top) {
+            if state.expanded || state.expandedContentVisible {
+                VStack(spacing: 0) {
                 HStack {
                     Label(state.selected.title, systemImage: "circle.lefthalf.filled").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
@@ -33,23 +40,42 @@ struct IslandView: View {
                         .accessibilityLabel(state.pinned ? "Unpin Island" : "Keep Island open")
                         .accessibilityAddTraits(state.pinned ? .isSelected : [])
                     Button(action: toggle) { Image(systemName: "chevron.up") }.help("Collapse Island").accessibilityLabel("Collapse Island")
-                }.buttonStyle(.plain).padding(.bottom, 12)
+                }.buttonStyle(SurfaceButtonStyle(accent: appearance.accent.color)).padding(.bottom, 10)
                 HStack(spacing: 6) {
                     ForEach(model.settings.island.modules) { module in
-                        Button { state.selected = module } label: {
+                        Button { select(module) } label: {
                             VStack(spacing: 5) {
                                 Image(systemName: module.symbol).font(.system(size: 15, weight: .medium))
-                                if appearance.showModuleLabels { Text(module.title).font(.system(size: 9, weight: .medium)).lineLimit(1).minimumScaleFactor(0.7) }
+                                if appearance.showModuleLabels { Text(module.title).font(.system(size: 10, weight: .medium)).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8) }
                             }
                             .frame(maxWidth: .infinity).frame(height: appearance.showModuleLabels ? 44 : 32)
-                            .background(state.selected == module ? appearance.accent.color.opacity(0.17) : .clear, in: RoundedRectangle(cornerRadius: 9))
+                            .background {
+                                if state.selected == module {
+                                    RoundedRectangle(cornerRadius: 9).fill(appearance.accent.color.opacity(0.17))
+                                        .matchedGeometryEffect(id: "moduleSelection", in: selectionAnimation)
+                                }
+                            }
                             .foregroundStyle(state.selected == module ? appearance.accent.color : .primary)
-                        }.buttonStyle(.plain).help(module.title).accessibilityLabel(module.title)
+                        }.buttonStyle(SurfaceButtonStyle(accent: appearance.accent.color)).help(module.title).accessibilityLabel(module.title)
                             .accessibilityAddTraits(state.selected == module ? .isSelected : [])
                     }
-                }.padding(.bottom, 14)
-                registry.content(for: state.selected).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            } else {
+                }.padding(.bottom, 12)
+                    .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: WorkspaceMotion.content), value: state.selected)
+                registry.content(for: state.selected)
+                    .environment(\.islandFocusRequest, keyboardActive() ? state.focusRequest : 0)
+                    .id(state.selected)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .transition(WorkspaceMotion.transition(reduceMotion: motionDisabled))
+                    .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: WorkspaceMotion.content), value: state.selected)
+                }
+                .padding(18)
+                .transition(WorkspaceMotion.transition(reduceMotion: motionDisabled))
+                .opacity(state.expandedContentVisible ? 1 : 0)
+                .offset(y: state.expandedContentVisible || motionDisabled ? 0 : 4)
+                .allowsHitTesting(state.expandedContentVisible)
+                .accessibilityHidden(!state.expandedContentVisible)
+            }
+            if state.compactContentVisible {
                 Button(action: toggle) {
                     Group {
                         if model.settings.island.minimal {
@@ -67,17 +93,22 @@ struct IslandView: View {
                         }
                     }.contentShape(Rectangle()).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }.buttonStyle(.plain).accessibilityLabel("Expand \(state.selected.title)")
+                    .padding(model.settings.island.minimal ? 2 : 10)
+                    .transition(WorkspaceMotion.transition(reduceMotion: motionDisabled))
             }
         }
-        .padding(state.expanded ? 18 : (model.settings.island.minimal ? 2 : 10))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(IslandSurface(appearance: appearance, radius: radius))
+        .background {
+            IslandSurface(appearance: appearance, radius: radius)
+                .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: appearance.animationDuration), value: state.expanded)
+        }
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .tint(appearance.accent.color)
+        .accentColor(appearance.accent.color)
+        .environment(\.workspaceMotionDisabled, motionDisabled)
         .preferredColorScheme(appearance.theme.colorScheme)
         .onHover(perform: hover)
-        .onExitCommand { state.pinned = false; state.expanded = false }
-        .animation(reduceMotion || appearance.animationDuration == 0 ? nil : .easeInOut(duration: appearance.animationDuration), value: state.expanded)
+        .onExitCommand(perform: close)
     }
 }
 
@@ -89,6 +120,7 @@ private struct IslandCompactContent: View {
     @ObservedObject var calendar: CalendarService
     @ObservedObject var calculator: CalculatorService
     let accent: Color
+    @State private var currentDate = Date.now
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: module.symbol).foregroundStyle(accent)
@@ -100,7 +132,7 @@ private struct IslandCompactContent: View {
                         if timer.isPaused { Image(systemName: "pause.fill").foregroundStyle(.secondary) }
                     } else { Text(timer.didComplete ? "Timer complete" : "Set a timer") }
                 case .music: Text(music.track?.title ?? "Connect a player")
-                case .calendar: Text(calendar.events.first?.title ?? Date.now.formatted(.dateTime.month(.abbreviated).day()))
+                case .calendar: Text(calendar.events.first?.title ?? currentDate.formatted(.dateTime.month(.abbreviated).day()))
                 case .calculator: Text(calculator.expression.isEmpty ? "Quick calculation" : calculator.resultText)
                 case .system: Text("CPU \(system.cpuUsage.formatted(.percent.precision(.fractionLength(0))))").monospacedDigit()
                 }
@@ -108,5 +140,9 @@ private struct IslandCompactContent: View {
             Spacer(minLength: 0)
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
         }
+        .onAppear { currentDate = .now }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in currentDate = .now }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in currentDate = .now }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)) { _ in currentDate = .now }
     }
 }

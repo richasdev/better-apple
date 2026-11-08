@@ -3,6 +3,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 import BetterAppleCore
 
+private final class DockPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 struct DockApplication: Identifiable {
     let url: URL
     let name: String
@@ -13,7 +18,7 @@ struct DockApplication: Identifiable {
 
 @MainActor
 final class DockManager: ObservableObject {
-    @Published var preferences: DockPreferences { didSet { save(); refresh() } }
+    @Published var preferences: DockPreferences { didSet { if preferences != oldValue { save(); refresh() } } }
     @Published private(set) var applications: [DockApplication] = []
     @Published private(set) var hoveringScreens: Set<String> = []
     @Published private(set) var errorMessage: String?
@@ -22,6 +27,7 @@ final class DockManager: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var applicationObservers: [NSObjectProtocol] = []
     private var hideWork: [String: DispatchWorkItem] = [:]
+    private var hoverRevisions: [String: UInt] = [:]
     private var iconCache: [String: NSImage] = [:]
     private var menuTracking = false
     var hovering: Bool { !hoveringScreens.isEmpty }
@@ -42,7 +48,10 @@ final class DockManager: ObservableObject {
         }
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
             applicationObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.reloadApplications(); self?.positionWindows(animated: false) }
+                Task { @MainActor in
+                    guard let self, self.preferences.enabled else { return }
+                    self.reloadApplications(); self.positionWindows(animated: true)
+                }
             })
         }
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
@@ -56,6 +65,13 @@ final class DockManager: ObservableObject {
                 guard let self else { return }
                 self.menuTracking = false
                 for (id, destination) in self.destinations { self.hover(destination.panel.frame.contains(NSEvent.mouseLocation), screenID: id) }
+            }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] notification in
+            guard let window = notification.object as? DockPanel else { return }
+            Task { @MainActor [weak self, weak window] in
+                guard let self, let window, let id = self.destinations.first(where: { $0.value.panel === window })?.key else { return }
+                self.hover(window.frame.contains(NSEvent.mouseLocation), screenID: id)
             }
         })
         reloadApplications()
@@ -86,11 +102,15 @@ final class DockManager: ObservableObject {
         for screen in screens {
             let id = Self.screenID(screen)
             if destinations[id] == nil {
-                let window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
+                let window = DockPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
                 window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = true
                 window.level = .floating; window.collectionBehavior = [.canJoinAllSpaces, .stationary]
                 window.hidesOnDeactivate = false; window.isReleasedWhenClosed = false
-                window.contentView = NSHostingView(rootView: DockSurface(manager: self, screenID: id))
+                let hosting = NSHostingView(rootView: DockSurface(manager: self, screenID: id))
+                // AppKit owns the reveal strip's explicit size. Retained hidden
+                // icons must not impose their expanded minimum on the panel.
+                hosting.sizingOptions = []
+                window.contentView = hosting
                 destinations[id] = (window, screen)
             } else if let panel = destinations[id]?.panel { destinations[id] = (panel, screen) }
         }
@@ -99,6 +119,7 @@ final class DockManager: ObservableObject {
     }
     private func closePanel(_ id: String) {
         hideWork.removeValue(forKey: id)?.cancel(); hoveringScreens.remove(id)
+        hoverRevisions.removeValue(forKey: id)
         guard let destination = destinations.removeValue(forKey: id) else { return }
         destination.panel.orderOut(nil); destination.panel.contentView = nil; destination.panel.close()
     }
@@ -126,32 +147,49 @@ final class DockManager: ObservableObject {
     }
     private func positionWindows(animated: Bool) {
         let settings = (try? preferences.validated()) ?? DockPreferences()
+        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let metrics = DockLayoutMetrics(settings, reduceMotion: reduced)
         for (id, destination) in destinations {
             let frame = destination.screen.visibleFrame
             let vertical = settings.position != .bottom
-            let labelHeight: Double = settings.showLabels ? 17 : 0
-            let count = Double(max(1, applications.count))
-            let itemLength = settings.iconSize + (vertical ? labelHeight + 7 : 0)
-            let length = min((itemLength + settings.spacing) * count + 36, max(40, (vertical ? frame.height : frame.width) - 24))
-            let thickness = settings.autoHide && !hoveringScreens.contains(id) ? 10 : settings.iconSize * settings.magnification + 34 + (vertical ? 0 : labelHeight)
+            let axisLength = vertical ? frame.height : frame.width
+            let crossLength = vertical ? frame.width : frame.height
+            let axisMargin = min(12, axisLength / 4)
+            let edgeMargin = min(8, crossLength / 4)
+            let length = min(metrics.length(count: applications.count, vertical: vertical, spacing: settings.spacing), axisLength - axisMargin * 2)
+            let requestedThickness = settings.autoHide && !hoveringScreens.contains(id) ? 10 : metrics.thickness(vertical: vertical)
+            let thickness = min(requestedThickness, crossLength - edgeMargin * 2)
             let rect: NSRect
             switch settings.position {
-            case .bottom: rect = NSRect(x: frame.midX - length / 2, y: frame.minY + 8, width: length, height: min(thickness, frame.height))
-            case .left: rect = NSRect(x: frame.minX + 8, y: frame.midY - length / 2, width: min(thickness, frame.width), height: length)
-            case .right: rect = NSRect(x: frame.maxX - min(thickness, frame.width) - 8, y: frame.midY - length / 2, width: min(thickness, frame.width), height: length)
+            case .bottom: rect = NSRect(x: frame.midX - length / 2, y: frame.minY + edgeMargin, width: length, height: thickness)
+            case .left: rect = NSRect(x: frame.minX + edgeMargin, y: frame.midY - length / 2, width: thickness, height: length)
+            case .right: rect = NSRect(x: frame.maxX - thickness - edgeMargin, y: frame.midY - length / 2, width: thickness, height: length)
             }
-            if animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, settings.animationDuration > 0 {
-                NSAnimationContext.runAnimationGroup { context in context.duration = settings.animationDuration; destination.panel.animator().setFrame(rect, display: true) }
+            guard destination.panel.frame != rect else { continue }
+            if animated, !reduced, settings.animationDuration > 0 {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = settings.animationDuration
+                    context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: hoveringScreens.contains(id))
+                    destination.panel.animator().setFrame(rect, display: true)
+                }
             } else { destination.panel.setFrame(rect, display: true) }
         }
     }
     func hover(_ entered: Bool, screenID: String) {
+        guard destinations[screenID] != nil else { return }
+        let revision = (hoverRevisions[screenID] ?? 0) &+ 1
+        hoverRevisions[screenID] = revision
         hideWork.removeValue(forKey: screenID)?.cancel()
         if entered {
             if hoveringScreens.insert(screenID).inserted { positionWindows(animated: true) }
         } else {
             let work = DispatchWorkItem { [weak self] in
-                guard let self, !self.menuTracking else { return }
+                guard let self, self.hoverRevisions[screenID] == revision else { return }
+                self.hideWork.removeValue(forKey: screenID)
+                guard let destination = self.destinations[screenID], !self.menuTracking,
+                      !destination.panel.isKeyWindow,
+                      destination.panel.childWindows?.contains(where: \.isVisible) != true,
+                      !destination.panel.frame.contains(NSEvent.mouseLocation) else { return }
                 if self.hoveringScreens.remove(screenID) != nil { self.positionWindows(animated: true) }
             }
             hideWork[screenID] = work

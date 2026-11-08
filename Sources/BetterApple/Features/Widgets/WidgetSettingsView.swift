@@ -4,6 +4,8 @@ import SwiftUI
 struct WidgetSettingsView: View {
     @ObservedObject var manager: WidgetManager
     @State private var expanded = Set<UUID>()
+    @State private var pendingNoteRemoval: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let commonZones = ["UTC", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Europe/London", "Europe/Paris", "America/New_York", "America/Los_Angeles", "America/Sao_Paulo", "Australia/Sydney"]
 
     var body: some View {
@@ -25,7 +27,7 @@ struct WidgetSettingsView: View {
                         if ![12.0, 16, 20, 24, 32, 48, 64].contains(manager.layoutPreferences.gridSize) {
                             Text("\(Int(manager.layoutPreferences.gridSize)) pt").tag(manager.layoutPreferences.gridSize)
                         }
-                    }
+                    }.transition(WorkspaceMotion.transition(reduceMotion: reduceMotion))
                 }
                 HStack {
                     Button("Arrange visible widgets") { manager.arrangeVisible() }.disabled(!manager.widgets.contains(where: \.visible))
@@ -34,6 +36,11 @@ struct WidgetSettingsView: View {
                 }
                 Text("Use the drag handle in edit mode to move a widget; resize from its edges. Right-click any widget for quick actions. Layout and notes save automatically.")
                     .font(.caption).foregroundStyle(.secondary)
+                if let message = manager.layoutMessage {
+                    Label(message, systemImage: "rectangle.3.group").font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Layout status: \(message)")
+                }
             }
             if manager.widgets.isEmpty {
                 Section {
@@ -54,10 +61,20 @@ struct WidgetSettingsView: View {
                 }
             }
         }.formStyle(.grouped)
+            .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.content), value: manager.layoutPreferences.snapToGrid)
             .onChange(of: manager.widgets.count) { oldCount, newCount in
-                if newCount > oldCount, let last = manager.widgets.last { expanded.insert(last.id) }
-                expanded.formIntersection(manager.widgets.map(\.id))
+                withAnimation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.content)) {
+                    if newCount > oldCount, let last = manager.widgets.last { expanded.insert(last.id) }
+                    expanded.formIntersection(manager.widgets.map(\.id))
+                }
             }
+            .confirmationDialog("Remove this note widget?", isPresented: Binding(get: { pendingNoteRemoval != nil }, set: { if !$0 { pendingNoteRemoval = nil } }), titleVisibility: .visible) {
+                Button("Remove note", role: .destructive) {
+                    if let id = pendingNoteRemoval { manager.remove(id: id) }
+                    pendingNoteRemoval = nil
+                }
+                Button("Cancel", role: .cancel) { pendingNoteRemoval = nil }
+            } message: { Text("The note’s contents will be deleted from this layout.") }
     }
 
     @ViewBuilder private func controls(_ item: WidgetConfiguration) -> some View {
@@ -85,7 +102,10 @@ struct WidgetSettingsView: View {
             Button("Bring forward") { manager.bringForward(id: item.id) }.disabled(!item.visible)
             Button("Duplicate") { if let id = manager.duplicate(id: item.id) { expanded.insert(id) } }.disabled(manager.widgets.count >= 30)
             Spacer()
-            Button("Remove", role: .destructive) { manager.remove(id: item.id) }
+            Button("Remove", role: .destructive) {
+                if item.kind == .notes && !current(item).note.isEmpty { pendingNoteRemoval = item.id }
+                else { manager.remove(id: item.id) }
+            }
         }
         .padding(.vertical, 6)
     }
@@ -138,6 +158,10 @@ struct WidgetSettingsView: View {
         })
     }
     private func expansion(_ id: UUID) -> Binding<Bool> {
-        Binding(get: { expanded.contains(id) }, set: { value in if value { expanded.insert(id) } else { expanded.remove(id) } })
+        Binding(get: { expanded.contains(id) }, set: { value in
+            withAnimation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.content)) {
+                if value { expanded.insert(id) } else { expanded.remove(id) }
+            }
+        })
     }
 }

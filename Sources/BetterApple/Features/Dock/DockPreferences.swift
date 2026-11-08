@@ -29,6 +29,36 @@ enum DockAccent: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// The same metrics size both the panel and its scroll content, including the
+/// largest hover footprint. Transforming an icon never moves its hit region.
+struct DockLayoutMetrics {
+    let hitSide: Double
+    let itemWidth: Double
+    let itemHeight: Double
+    let padding: Double
+    private let growth: Double
+    init(_ preferences: DockPreferences, reduceMotion: Bool) {
+        hitSide = max(28, preferences.iconSize)
+        itemWidth = hitSide + (preferences.showLabels ? 12 : 0)
+        itemHeight = hitSide + 7 + (preferences.showLabels ? 14 : 0)
+        let magnification = reduceMotion ? 1 : preferences.magnification
+        growth = preferences.iconSize * (magnification - 1)
+        // A focused icon and its two shoulders occupy at most ~1.32 times
+        // its own growth with the finite squared falloff used by DockSurface.
+        padding = max(12, growth * 0.66 + 8)
+    }
+    func length(count: Int, vertical: Bool, spacing: Double) -> Double {
+        let count = Double(max(1, count))
+        return count * (vertical ? itemHeight : itemWidth) + max(0, count - 1) * spacing + padding * 2
+    }
+    func horizontalPadding(vertical: Bool) -> Double { vertical ? max(12, growth / 2 + 8) : padding }
+    func topPadding(vertical: Bool) -> Double { vertical ? padding : max(12, growth + 8) }
+    func bottomPadding(vertical: Bool) -> Double { vertical ? padding : 12 }
+    func thickness(vertical: Bool) -> Double {
+        vertical ? itemWidth + horizontalPadding(vertical: true) * 2 : itemHeight + topPadding(vertical: false) + bottomPadding(vertical: false)
+    }
+}
+
 struct DockPreferences: Codable, Equatable {
     var enabled = false
     var iconSize: Double = 48
