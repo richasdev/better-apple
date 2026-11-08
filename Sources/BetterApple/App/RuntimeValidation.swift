@@ -22,6 +22,22 @@ enum RuntimeValidation {
             checks["island window expanded"] = app.island.state.expanded && NSApp.windows.contains {
                 $0 is IslandPanel && $0.isVisible && $0.frame.width >= 419 && $0.frame.height >= 249
             }
+            let islandWindows = Set(NSApp.windows.filter { $0 is IslandPanel && $0.isVisible }.map(\.windowNumber))
+            app.calculator.expression = "6 * 7"
+            app.applyPreset(.glass)
+            checks["workspace preset remains selected"] = app.model.settings.appearance == .glass && app.dock.preferences.material == .glass
+            app.model.settings.island.visual.theme = .light
+            app.model.settings.island.visual.accent = .orange
+            app.island.applySettings()
+            checks["appearance updates preserve island window and calculation"] = islandWindows == Set(NSApp.windows.filter { $0 is IslandPanel && $0.isVisible }.map(\.windowNumber)) && app.calculator.resultText == "42" && app.model.settings.appearance == .custom
+            app.island.togglePin()
+            checks["island pin and dismiss"] = app.island.state.pinned && app.island.state.expanded
+            app.island.collapse()
+            checks["island pin and dismiss"] = checks["island pin and dismiss"] == true && !app.island.state.pinned && !app.island.state.expanded
+            app.island.state.expanded = true
+            app.calculator.historyEnabled = true
+            app.calculator.commit()
+            checks["shared calculator commits optional history"] = app.calculator.history.count == 1 && app.widgets.calculator === app.calculator
             captureWindows(to: directory, prefix: "island")
             app.dock.show()
             checks["dock resolves real applications"] = !app.dock.applications.isEmpty
@@ -31,12 +47,36 @@ enum RuntimeValidation {
             checks["all widget kinds created"] = app.widgets.widgets.count == DesktopWidgetKind.allCases.count
             let notes = app.widgets.widgets.first { $0.kind == .notes }!
             app.widgets.update(notes.id) { $0.note = "Runtime validation — persisted locally" }
+            app.widgets.update(notes.id) { $0.title = "Workspace note"; $0.fontSize = 18; $0.accent = .purple }
+            let duplicateID = app.widgets.duplicate(id: notes.id)
+            let duplicate = app.widgets.widgets.first { $0.id == duplicateID }
+            checks["widget duplication preserves note and appearance"] = duplicate?.note == "Runtime validation — persisted locally" && duplicate?.title == "Workspace note" && duplicate?.fontSize == 18 && duplicate?.id != notes.id
+            if let duplicateID { app.widgets.remove(id: duplicateID) }
+            app.widgets.layoutPreferences = WidgetLayoutPreferences(snapToGrid: true, gridSize: 24)
+            app.timer.label = "Focus"
+            app.timer.completionSound = .silent
+            app.timer.addPreset(minutes: 10)
             app.widgets.flushPersistence()
             checks["notes updated"] = app.widgets.widgets.first { $0.id == notes.id }?.note == "Runtime validation — persisted locally"
             let exported = try app.configurationData()
             app.model.settings.island.width = 321
+            app.widgets.layoutPreferences.snapToGrid = false
+            app.timer.label = "Changed"
             try app.applyConfigurationData(exported)
             checks["suite JSON restores actual settings and widgets"] = app.model.settings.island.width == 220 && app.widgets.widgets.count == 10 && app.widgets.widgets.first { $0.id == notes.id }?.note == "Runtime validation — persisted locally"
+            checks["suite restores new personalization"] = app.model.settings.island.visual.theme == .light && app.model.settings.island.visual.accent == .orange && app.widgets.layoutPreferences.snapToGrid && app.timer.label == "Focus" && app.widgets.widgets.first { $0.id == notes.id }?.fontSize == 18
+            var legacy = try JSONSerialization.jsonObject(with: exported) as! [String: Any]
+            legacy.removeValue(forKey: "timer"); legacy.removeValue(forKey: "calculator"); legacy.removeValue(forKey: "widgetLayout")
+            var legacyApp = legacy["app"] as! [String: Any]
+            var legacyIsland = legacyApp["island"] as! [String: Any]; legacyIsland.removeValue(forKey: "appearance")
+            legacyApp["island"] = legacyIsland; legacy["app"] = legacyApp
+            var legacyDock = legacy["dock"] as! [String: Any]
+            for key in ["theme", "material", "accent", "cornerRadius", "magnification", "animationDuration", "showLabels", "showRunningApplications", "allDisplays"] { legacyDock.removeValue(forKey: key) }
+            legacy["dock"] = legacyDock
+            legacy["widgets"] = (legacy["widgets"] as! [[String: Any]]).map { entry -> [String: Any] in var value = entry; value.removeValue(forKey: "title"); value.removeValue(forKey: "fontSize"); value.removeValue(forKey: "options"); return value }
+            try app.applyConfigurationData(JSONSerialization.data(withJSONObject: legacy))
+            checks["legacy suite imports without losing notes"] = app.widgets.widgets.first { $0.id == notes.id }?.note == "Runtime validation — persisted locally" && app.model.settings.island.visual == IslandAppearance()
+            try app.applyConfigurationData(exported)
             var invalid = try JSONSerialization.jsonObject(with: exported) as! [String: Any]
             invalid["version"] = 999
             do {

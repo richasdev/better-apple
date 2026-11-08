@@ -1,7 +1,5 @@
-// Compile from the repository root:
-// /opt/homebrew/bin/rtk proxy xcrun swiftc -swift-version 5 -target arm64-apple-macosx14.0 -parse-as-library Sources/BetterApple/Services/*.swift Scripts/service-smoke.swift -o /tmp/betterapple-service-smoke
-// /opt/homebrew/bin/rtk proxy /tmp/betterapple-service-smoke
-// No Calendar/Automation prompts, playback changes, or volume writes occur.
+// Compile and run: /opt/homebrew/bin/rtk proxy python3 Scripts/validate_native.py --only services
+// No Calendar/Automation prompts, playback changes or volume writes occur.
 import AppKit
 import Foundation
 
