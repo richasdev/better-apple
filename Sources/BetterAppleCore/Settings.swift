@@ -43,6 +43,16 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var modules = ModuleID.allCases
     public var defaultModule: ModuleID = .calculator
     public var placement: IslandPlacement?
+    public var connectionNotifications: Bool?
+    public var dynamicHeight: Bool?
+    public var dynamicHeightEnabled: Bool {
+        get { dynamicHeight ?? true }
+        set { dynamicHeight = newValue }
+    }
+    public var connectionNotificationsEnabled: Bool {
+        get { connectionNotifications ?? true }
+        set { connectionNotifications = newValue }
+    }
     public var placementMode: IslandPlacement {
         get { placement ?? .camera }
         set { placement = newValue }

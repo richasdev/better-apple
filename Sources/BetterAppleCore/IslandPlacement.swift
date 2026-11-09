@@ -8,11 +8,13 @@ public struct CameraScreenMetrics: Equatable, Sendable {
     public let safeAreaTop: Double
     public let auxiliaryLeft: CGRect?
     public let auxiliaryRight: CGRect?
+    public let menuBarHeight: Double
 
     public init(screenFrame: CGRect, visibleFrame: CGRect, safeAreaTop: Double = 0,
-                auxiliaryLeft: CGRect? = nil, auxiliaryRight: CGRect? = nil) {
+                auxiliaryLeft: CGRect? = nil, auxiliaryRight: CGRect? = nil, menuBarHeight: Double = 24) {
         self.screenFrame = screenFrame; self.visibleFrame = visibleFrame
         self.safeAreaTop = safeAreaTop; self.auxiliaryLeft = auxiliaryLeft; self.auxiliaryRight = auxiliaryRight
+        self.menuBarHeight = menuBarHeight
     }
 }
 
@@ -39,10 +41,11 @@ public enum CameraIslandGeometry {
         }
         let safeTop = metrics.safeAreaTop.isFinite ? max(0, min(metrics.safeAreaTop, screen.height)) : 0
         let hasNotch = safeTop > 0
-        let syntheticHeight = min(32, screen.height)
-        let cameraHeight = hasNotch ? safeTop : syntheticHeight
         let intersection = usable(metrics.visibleFrame) ? metrics.visibleFrame.intersection(screen) : .null
         let reservedMenuHeight = usable(intersection) ? max(0, screen.maxY - intersection.maxY) : 0
+        let fallbackMenuHeight = metrics.menuBarHeight.isFinite ? max(1, metrics.menuBarHeight) : 24
+        let syntheticHeight = min(screen.height, reservedMenuHeight > 0 ? reservedMenuHeight : fallbackMenuHeight)
+        let cameraHeight = hasNotch ? safeTop : syntheticHeight
         let band = min(screen.height, max(cameraHeight, reservedMenuHeight))
         let cameraGap = hasNotch ? cutoutGap(screen: screen, bandHeight: safeTop,
                                              left: metrics.auxiliaryLeft, right: metrics.auxiliaryRight) : nil
@@ -58,12 +61,12 @@ public enum CameraIslandGeometry {
         let center = cameraGap?.midX ?? screen.midX
         let capX = bounded(center - capWidth / 2, screen.minX, screen.maxX - capWidth)
         let requestedHeight = expandedHeight.isFinite ? max(4, expandedHeight) : 320
-        let bodyHeight = min(max(0, screen.height - band), expanded ? requestedHeight : 4)
+        let bodyHeight = min(max(0, screen.height - band), expanded ? requestedHeight : (hasNotch ? 4 : 0))
         let body = CGRect(x: capX + shoulder, y: screen.maxY - band - bodyHeight,
                           width: bodyWidth, height: bodyHeight)
         // Four points overlap the body so rounding never creates a gap between
         // the cap and the lower body while their independent windows animate.
-        let capHeight = min(screen.height, band + 4)
+        let capHeight = min(screen.height, band + (expanded || hasNotch ? 4 : 0))
         let cap = CGRect(x: capX, y: screen.maxY - capHeight, width: capWidth, height: capHeight)
         let bottom = min(body.minY, cap.minY)
         let frame = CGRect(x: cap.minX, y: bottom, width: cap.width, height: screen.maxY - bottom)
