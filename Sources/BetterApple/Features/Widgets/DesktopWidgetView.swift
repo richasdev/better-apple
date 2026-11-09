@@ -5,6 +5,7 @@ import BetterAppleCore
 struct DesktopWidgetView: View {
     @ObservedObject var manager: WidgetManager
     let id: UUID
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var lastKnownConfiguration: WidgetConfiguration?
@@ -17,7 +18,9 @@ struct DesktopWidgetView: View {
     private var configuration: WidgetConfiguration? { manager.widgets.first { $0.id == id } ?? lastKnownConfiguration }
     var body: some View {
         if let item = configuration {
-            VStack(alignment: .leading, spacing: 14) {
+            let compact = item.height < 140 && [.clock, .calendar, .battery, .system].contains(item.kind)
+            VStack(alignment: .leading, spacing: compact ? 0 : 14) {
+                if (item.displaysHeader && !compact) || manager.editing {
                 HStack {
                     Label(item.displayTitle, systemImage: item.kind.symbol).font(.system(.caption, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1).accessibilityAddTraits(.isHeader)
                     Spacer()
@@ -30,7 +33,8 @@ struct DesktopWidgetView: View {
                     }
                 }.frame(height: 28)
                     .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: manager.editing)
-                if [.analogClock, .notes, .calculator].contains(item.kind) {
+                }
+                if [.clock, .calendar, .analogClock, .notes, .calculator].contains(item.kind) || ([.battery, .system].contains(item.kind) && !manager.editing && !item.displaysHeader) {
                     content(item)
                 } else {
                     ScrollView {
@@ -39,19 +43,29 @@ struct DesktopWidgetView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(20)
+            .padding(compact || (item.surface == .minimal && !manager.editing) ? 8 : 20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
-                if reduceTransparency {
-                    RoundedRectangle(cornerRadius: 22).fill(Color(nsColor: .windowBackgroundColor))
-                } else {
-                    RoundedRectangle(cornerRadius: 22).fill(.ultraThinMaterial.opacity(item.opacity))
+                if item.surface != .minimal {
+                    if item.surface == .card {
+                        let dark = item.theme == .dark || (item.theme == .automatic && colorScheme == .dark)
+                        RoundedRectangle(cornerRadius: item.radius).fill((dark ? Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1) : Color(nsColor: .windowBackgroundColor)).opacity(reduceTransparency ? 1 : item.opacity))
+                    } else if reduceTransparency {
+                        RoundedRectangle(cornerRadius: item.radius).fill(Color(nsColor: .windowBackgroundColor))
+                    } else if item.surface == .glass {
+                        RoundedRectangle(cornerRadius: item.radius).fill(.ultraThinMaterial.opacity(item.opacity))
+                    } else {
+                        RoundedRectangle(cornerRadius: item.radius).fill(.regularMaterial.opacity(item.opacity))
+                    }
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: 22).stroke(manager.editing ? Color.accentColor.opacity(0.7) : Color.primary.opacity(item.border ? 0.12 : 0), lineWidth: manager.editing ? 2 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: 22))
+            .foregroundStyle(item.textColor)
+            .opacity(item.surface == .minimal && !manager.editing ? item.opacity : 1)
+            .overlay(RoundedRectangle(cornerRadius: item.radius).stroke(manager.editing ? Color.accentColor.opacity(0.7) : item.textColor.opacity(item.border && item.surface != .minimal ? 0.12 : 0), lineWidth: manager.editing ? 2 : 1))
+            .clipShape(RoundedRectangle(cornerRadius: item.surface == .minimal ? 0 : item.radius))
             .padding(2)
             .preferredColorScheme(item.theme == .automatic ? nil : item.theme == .dark ? .dark : .light)
+            .environment(\.colorScheme, item.theme == .automatic ? colorScheme : item.theme == .dark ? .dark : .light)
             .tint(item.accent?.color ?? Color.accentColor)
             .accentColor(item.accent?.color ?? Color.accentColor)
             .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: manager.editing)
@@ -79,23 +93,34 @@ struct DesktopWidgetView: View {
     @ViewBuilder private func content(_ item: WidgetConfiguration) -> some View {
         switch item.kind {
         case .clock:
+            let condensed = item.height < 140
             TimelineView(.periodic(from: WidgetClockFormatting.scheduleStart(showSeconds: item.displayOptions.showSeconds), by: item.displayOptions.showSeconds ? 1 : 60)) { context in
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(WidgetClockFormatting.time(context.date, options: item.displayOptions)).font(.system(size: item.textSize, weight: .light, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.4)
-                    if item.displayOptions.showDate {
-                        Text(WidgetClockFormatting.date(context.date, zone: item.displayOptions.timeZone)).font(.subheadline).foregroundStyle(.secondary)
+                    Text(WidgetClockFormatting.time(context.date, options: item.displayOptions)).font(.system(size: condensed ? min(item.textSize, max(12, (item.height - 40) * 0.75)) : item.textSize, weight: item.weight, design: item.surface == .minimal ? .default : .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.2)
+                    if item.displayOptions.showDate && !condensed {
+                        Text(WidgetClockFormatting.date(context.date, zone: item.displayOptions.timeZone)).font(.system(size: min(24, max(13, item.textSize / 7)), weight: .medium)).foregroundStyle(item.textColor.opacity(0.8))
                     }
-                    if let zone = item.displayOptions.clockTimeZoneIdentifier { Text(zone.replacingOccurrences(of: "_", with: " ")).font(.caption).foregroundStyle(.tertiary) }
+                    if !condensed && (item.displayOptions.showTimeZone || item.displayOptions.clockTimeZoneIdentifier != nil) {
+                        Text(item.displayOptions.timeZone.abbreviation(for: context.date) ?? item.displayOptions.timeZone.identifier)
+                            .font(.caption.weight(.medium)).foregroundStyle(item.textColor.opacity(0.65))
+                            .accessibilityLabel("Time zone: \(item.displayOptions.timeZone.identifier)")
+                    }
                 }
             }
         case .analogClock:
             AnalogClockWidget(options: item.displayOptions)
         case .calendar:
             TimelineView(.periodic(from: .now, by: 60)) { context in
+                if item.height < 140 {
+                    Text(context.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
+                        .font(.system(size: min(item.textSize, 28), weight: item.weight))
+                        .lineLimit(1).minimumScaleFactor(0.3)
+                } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(context.date, format: .dateTime.weekday(.wide)).textCase(.uppercase).font(.caption.weight(.semibold)).foregroundStyle(.tint)
-                    Text(context.date, format: .dateTime.day()).font(.system(size: item.textSize, weight: .light, design: .rounded))
+                    Text(context.date, format: .dateTime.day()).font(.system(size: item.textSize, weight: item.weight, design: .rounded)).lineLimit(1).minimumScaleFactor(0.4)
                     Text(context.date, format: .dateTime.month(.wide).year()).foregroundStyle(.secondary)
+                }
                 }
             }
         case .events:
@@ -109,9 +134,9 @@ struct DesktopWidgetView: View {
         case .music:
             MusicWidget(service: manager.music, options: item.displayOptions, fontSize: item.textSize)
         case .battery:
-            BatteryWidget(service: manager.system, options: item.displayOptions, fontSize: item.textSize)
+            BatteryWidget(service: manager.system, options: item.displayOptions, fontSize: item.textSize, weight: item.weight, compact: item.height < 130)
         case .system:
-            SystemWidget(service: manager.system, options: item.displayOptions, fontSize: item.textSize)
+            SystemWidget(service: manager.system, options: item.displayOptions, fontSize: item.textSize, weight: item.weight, compact: item.height < 160)
         case .timer:
             TimerWidget(service: manager.timer, options: item.displayOptions, fontSize: item.textSize)
         }
@@ -250,12 +275,21 @@ private struct BatteryWidget: View {
     @ObservedObject var service: SystemStatusService
     let options: WidgetDisplayOptions
     let fontSize: Double
+    let weight: Font.Weight
+    var compact = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: compact ? 6 : 12) {
             if let battery = service.batteryLevel {
-                Text(battery, format: .percent.precision(.fractionLength(0))).font(.system(size: fontSize, weight: .light, design: .rounded)).lineLimit(1).minimumScaleFactor(0.5)
+                HStack {
+                    Text(battery, format: .percent.precision(.fractionLength(0))).font(.system(size: compact ? min(fontSize, 28) : fontSize, weight: weight, design: .rounded)).lineLimit(1).minimumScaleFactor(0.5)
+                    if compact && options.showChargingState {
+                        Spacer()
+                        Image(systemName: service.isCharging ? "battery.100.bolt" : "battery.100percent")
+                            .accessibilityLabel(service.isCharging ? "Charging" : "Not charging")
+                    }
+                }
                 if options.showProgress { ProgressView(value: battery) }
-                if options.showChargingState {
+                if options.showChargingState && !compact {
                     Label(service.isCharging ? "Charging" : battery >= 0.99 ? "Fully charged" : "Not charging", systemImage: service.isCharging ? "battery.100.bolt" : "battery.100percent")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -268,18 +302,20 @@ private struct SystemWidget: View {
     @ObservedObject var service: SystemStatusService
     let options: WidgetDisplayOptions
     let fontSize: Double
+    let weight: Font.Weight
+    var compact = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: compact ? 4 : 16) {
             if options.showCPU {
                 LabeledContent("CPU", value: service.cpuUsage.formatted(.percent.precision(.fractionLength(0))))
                 if options.showProgress { ProgressView(value: service.cpuUsage) }
             }
             if options.showMemory {
                 LabeledContent("Memory", value: ByteCountFormatter.string(fromByteCount: Int64(service.memoryUsedBytes), countStyle: .memory))
-                Text("of \(ByteCountFormatter.string(fromByteCount: Int64(service.memoryTotalBytes), countStyle: .memory)) physical memory").font(.caption).foregroundStyle(.secondary)
+                if !compact { Text("of \(ByteCountFormatter.string(fromByteCount: Int64(service.memoryTotalBytes), countStyle: .memory)) physical memory").font(.caption).foregroundStyle(.secondary) }
                 if options.showProgress { ProgressView(value: service.memoryTotalBytes > 0 ? Double(service.memoryUsedBytes) / Double(service.memoryTotalBytes) : 0) }
             }
-        }.font(.system(size: fontSize))
+        }.font(.system(size: fontSize, weight: weight))
     }
 }
 

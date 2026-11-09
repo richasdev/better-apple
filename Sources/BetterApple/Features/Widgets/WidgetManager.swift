@@ -7,9 +7,11 @@ private struct WidgetWindowState: Equatable {
     let visible: Bool
     let x: Double, y: Double, width: Double, height: Double
     let shadow: Bool
+    let theme: DesktopWidgetTheme
     init(_ widget: WidgetConfiguration) {
         id = widget.id; visible = widget.visible; x = widget.x; y = widget.y
         width = widget.width; height = widget.height; shadow = widget.shadow
+        theme = widget.theme
     }
 }
 
@@ -21,10 +23,6 @@ final class WidgetManager: ObservableObject {
             defaults.set(enabled, forKey: "widgets.enabled")
             if !enabled {
                 editing = false
-                // A feature switch tears down even panels still finishing a fade.
-                let retiring = Array(retiringPanels.values)
-                retiringPanels.removeAll()
-                retiring.forEach { $0.orderOut(nil); $0.contentView = nil; $0.close() }
             }
             refresh()
         }
@@ -161,13 +159,14 @@ final class WidgetManager: ObservableObject {
         let snapped = constrainedFrame(NSRect(x: (frame.minX / grid).rounded() * grid,
                                              y: (frame.minY / grid).rounded() * grid,
                                              width: min(800, max(220, (frame.width / grid).rounded() * grid)),
-                                             height: min(800, max(160, (frame.height / grid).rounded() * grid))))
+                                             height: min(800, max(widgets.first { $0.id == id }?.minimumHeight ?? 160, (frame.height / grid).rounded() * grid))))
         persistFrame(snapped, id: id)
         movePanel(panel, to: snapped, id: id, animated: true)
     }
     func show() { suspended = false; refresh() }
     func hide() { suspended = true; refresh() }
     func refresh(animated: Bool = false) {
+        if suspended || !enabled { closeRetiringPanels() }
         guard !updating else { return }
         updating = true
         defer { updating = false; scheduleVisibilityChange() }
@@ -191,13 +190,17 @@ final class WidgetManager: ObservableObject {
                 panel.hidesOnDeactivate = false
                 panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
                 panel.isReleasedWhenClosed = false
-                panel.minSize = NSSize(width: 220, height: 160)
+                panel.minSize = NSSize(width: 220, height: item.minimumHeight)
                 panel.maxSize = NSSize(width: 800, height: 800)
                 let delegate = WidgetWindowDelegate(manager: self, id: item.id)
                 panel.delegate = delegate; delegates[item.id] = delegate; panels[item.id] = panel
                 // NSPanel starts with an empty NSView, not a nil content view.
-                panel.contentView = NSHostingView(rootView: DesktopWidgetView(manager: self, id: item.id))
+                let hosting = NSHostingView(rootView: DesktopWidgetView(manager: self, id: item.id))
+                hosting.sizingOptions = []
+                panel.contentView = hosting
             }
+            panel.minSize = NSSize(width: 220, height: item.minimumHeight)
+            panel.appearance = item.theme == .automatic ? nil : NSAppearance(named: item.theme == .dark ? .darkAqua : .aqua)
             panel.isMovableByWindowBackground = editing
             let mask: NSWindow.StyleMask = editing ? [.titled, .resizable, .fullSizeContentView, .nonactivatingPanel] : [.titled, .fullSizeContentView, .nonactivatingPanel]
             if panel.styleMask != mask { panel.styleMask = mask }
@@ -274,11 +277,14 @@ final class WidgetManager: ObservableObject {
         panel.delegate = nil
         animatingFrames.remove(id); frameGenerations.removeValue(forKey: id)
         let identity = ObjectIdentifier(panel)
-        let close = { [weak self, panel] in
-            panel.orderOut(nil); panel.contentView = nil; panel.close()
-            self?.retiringPanels.removeValue(forKey: identity)
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            panel.orderOut(nil); panel.contentView = nil; panel.close(); return
         }
-        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { close(); return }
+        let close = { [weak self, panel] in
+            guard let self, self.retiringPanels[identity] === panel else { return }
+            self.retiringPanels.removeValue(forKey: identity)
+            panel.orderOut(nil); panel.contentView = nil; panel.close()
+        }
         // Keep the old panel only for this finite fade; a rapid re-show creates an independent panel.
         retiringPanels[identity] = panel
         NSAnimationContext.runAnimationGroup { context in
@@ -286,6 +292,17 @@ final class WidgetManager: ObservableObject {
             context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: false)
             panel.animator().alphaValue = 0
         } completionHandler: { Task { @MainActor in close() } }
+        // Occluded windows may not finish their native animation callback promptly.
+        // Bound the lifetime of hidden SwiftUI content without a polling timer.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(WorkspaceMotion.quick + 0.1))
+            close()
+        }
+    }
+    private func closeRetiringPanels() {
+        let retiring = Array(retiringPanels.values)
+        retiringPanels.removeAll()
+        retiring.forEach { $0.orderOut(nil); $0.contentView = nil; $0.close() }
     }
     private func scheduleSave() {
         saveWork?.cancel()

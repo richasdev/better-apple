@@ -46,11 +46,42 @@ enum DesktopWidgetAccent: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum WidgetSurfaceStyle: String, Codable, CaseIterable, Identifiable {
+    case card, glass, minimal
+    var id: String { rawValue }
+    var title: String { self == .minimal ? "Desktop · no background" : rawValue.capitalized }
+}
+
+enum WidgetInk: String, Codable, CaseIterable, Identifiable {
+    case automatic, white, black
+    var id: String { rawValue }
+    var color: Color {
+        switch self { case .automatic: return .primary; case .white: return .white; case .black: return .black }
+    }
+}
+
+enum WidgetTypeWeight: String, Codable, CaseIterable, Identifiable {
+    case light, regular, semibold, bold
+    var id: String { rawValue }
+    var weight: Font.Weight {
+        switch self { case .light: return .light; case .regular: return .regular; case .semibold: return .semibold; case .bold: return .bold }
+    }
+}
+
+enum WidgetPresentationPreset: String, CaseIterable, Identifiable {
+    case desktopClock, statusBar, glass, pureBlack
+    var id: String { rawValue }
+    var title: String {
+        switch self { case .desktopClock: return "Desktop clock"; case .statusBar: return "Minimal status"; case .glass: return "Glass"; case .pureBlack: return "Pure black" }
+    }
+}
+
 /// Presentation preferences are independent of sampling. A widget never creates a service timer.
 struct WidgetDisplayOptions: Codable, Equatable {
     var showSeconds = false
     var use24Hour = true
     var showDate = true
+    var showTimeZone = false
     var clockTimeZoneIdentifier: String?
     var showArtwork = true
     var showArtist = true
@@ -62,7 +93,7 @@ struct WidgetDisplayOptions: Codable, Equatable {
 
     init() {}
     private enum CodingKeys: String, CodingKey {
-        case showSeconds, use24Hour, showDate, clockTimeZoneIdentifier, showArtwork, showArtist
+        case showSeconds, use24Hour, showDate, showTimeZone, clockTimeZoneIdentifier, showArtwork, showArtist
         case showProgress, showCPU, showMemory, showChargingState, eventLimit
     }
     init(from decoder: Decoder) throws {
@@ -70,6 +101,7 @@ struct WidgetDisplayOptions: Codable, Equatable {
         showSeconds = try values.decodeIfPresent(Bool.self, forKey: .showSeconds) ?? false
         use24Hour = try values.decodeIfPresent(Bool.self, forKey: .use24Hour) ?? true
         showDate = try values.decodeIfPresent(Bool.self, forKey: .showDate) ?? true
+        showTimeZone = try values.decodeIfPresent(Bool.self, forKey: .showTimeZone) ?? false
         clockTimeZoneIdentifier = try values.decodeIfPresent(String.self, forKey: .clockTimeZoneIdentifier)
         showArtwork = try values.decodeIfPresent(Bool.self, forKey: .showArtwork) ?? true
         showArtist = try values.decodeIfPresent(Bool.self, forKey: .showArtist) ?? true
@@ -109,6 +141,37 @@ struct WidgetConfiguration: Codable, Identifiable {
     var title: String?
     var fontSize: Double?
     var options: WidgetDisplayOptions?
+    var surfaceStyle: WidgetSurfaceStyle?
+    var showHeader: Bool?
+    var cornerRadius: Double?
+    var ink: WidgetInk?
+    var typeWeight: WidgetTypeWeight?
+    var surface: WidgetSurfaceStyle { surfaceStyle ?? .card }
+    var displaysHeader: Bool { showHeader ?? (surface == .card) }
+    var radius: Double { cornerRadius ?? 22 }
+    var textColor: Color { (ink ?? .automatic).color }
+    var weight: Font.Weight { (typeWeight ?? .light).weight }
+    var maximumTextSize: Double { [.clock, .calendar, .timer, .battery].contains(kind) ? 200 : 64 }
+    var minimumHeight: Double { [.clock, .battery, .system, .calendar].contains(kind) ? 72 : 160 }
+    mutating func apply(_ preset: WidgetPresentationPreset) {
+        switch preset {
+        case .desktopClock:
+            // This preset is offered for clocks only; it never replaces another widget's content.
+            surfaceStyle = .minimal; showHeader = false; ink = .white; typeWeight = .bold
+            border = false; shadow = false; width = 620; height = 250; fontSize = 164
+            var display = displayOptions; display.showDate = true; display.showTimeZone = true; display.showSeconds = false; options = display
+        case .statusBar:
+            surfaceStyle = .minimal; showHeader = false; ink = .white; typeWeight = .semibold
+            border = false; shadow = false; width = 300; height = kind == .system ? 150 : 110
+            fontSize = kind == .battery ? 32 : 14
+        case .pureBlack:
+            surfaceStyle = .card; theme = .dark; opacity = 1; ink = .white; border = false
+        case .glass:
+            surfaceStyle = .glass; showHeader = false; ink = .automatic; typeWeight = .regular
+            border = true; shadow = true; cornerRadius = 26; opacity = 0.85
+            height = max(160, height)
+        }
+    }
     var displayTitle: String {
         let custom = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return custom.isEmpty ? kind.title : custom
@@ -126,10 +189,11 @@ struct WidgetConfiguration: Codable, Identifiable {
         }
     }
     func validated() throws -> Self {
-        guard x.isFinite, y.isFinite, (220...800).contains(width), (160...800).contains(height),
+        guard x.isFinite, y.isFinite, (220...800).contains(width), (minimumHeight...800).contains(height),
               (0.2...1).contains(opacity) else { throw WidgetValidationError.invalidGeometry }
         guard (title?.count ?? 0) <= 80, note.count <= 100000,
-              fontSize.map({ $0.isFinite && (10...64).contains($0) }) ?? true,
+              fontSize.map({ $0.isFinite && (10...maximumTextSize).contains($0) }) ?? true,
+              (cornerRadius.map { $0.isFinite && (0...60).contains($0) } ?? true),
               (1...8).contains(displayOptions.eventLimit),
               displayOptions.clockTimeZoneIdentifier.map({ TimeZone(identifier: $0) != nil }) ?? true,
               kind != .system || displayOptions.showCPU || displayOptions.showMemory else { throw WidgetValidationError.invalidOptions }
@@ -139,11 +203,12 @@ struct WidgetConfiguration: Codable, Identifiable {
         var value = self
         value.x = x.isFinite ? x : 80; value.y = y.isFinite ? y : 100
         value.width = width.isFinite ? min(800, max(220, width)) : 300
-        value.height = height.isFinite ? min(800, max(160, height)) : 240
+        value.height = height.isFinite ? min(800, max(minimumHeight, height)) : 240
         value.opacity = opacity.isFinite ? min(1, max(0.2, opacity)) : 0.95
         value.title = title.map { String($0.prefix(80)) }
         value.note = String(note.prefix(100000))
-        if let size = fontSize { value.fontSize = size.isFinite ? min(64, max(10, size)) : nil }
+        if let size = fontSize { value.fontSize = size.isFinite ? min(maximumTextSize, max(10, size)) : nil }
+        if let radius = cornerRadius { value.cornerRadius = radius.isFinite ? min(60, max(0, radius)) : nil }
         if var options {
             if let zone = options.clockTimeZoneIdentifier, TimeZone(identifier: zone) == nil { options.clockTimeZoneIdentifier = nil }
             options.eventLimit = min(8, max(1, options.eventLimit))

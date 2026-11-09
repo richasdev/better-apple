@@ -86,6 +86,28 @@ struct WidgetSettingsView: View {
 
     @ViewBuilder private func controls(_ item: WidgetConfiguration) -> some View {
         Toggle("Visible", isOn: binding(item, \.visible))
+        Menu("Apply appearance preset") {
+            if item.kind == .clock { Button("Desktop clock") { manager.update(item.id) { $0.apply(.desktopClock) } } }
+            if [.battery, .system, .calendar].contains(item.kind) { Button("Minimal status") { manager.update(item.id) { $0.apply(.statusBar) } } }
+            Button("Glass") { manager.update(item.id) { $0.apply(.glass) } }
+            Button("Pure black") { manager.update(item.id) { $0.apply(.pureBlack) } }
+        }
+        Picker("Surface", selection: Binding(get: { current(item).surface }, set: { style in manager.update(item.id) { $0.surfaceStyle = style } })) {
+            ForEach(WidgetSurfaceStyle.allCases) { Text($0.title).tag($0) }
+        }
+        Toggle("Show title outside edit mode", isOn: Binding(get: { current(item).displaysHeader }, set: { visible in manager.update(item.id) { $0.showHeader = visible } }))
+        Picker("Text color", selection: Binding(get: { current(item).ink ?? .automatic }, set: { ink in manager.update(item.id) { $0.ink = ink } })) {
+            ForEach(WidgetInk.allCases) { Text($0.rawValue.capitalized).tag($0) }
+        }
+        if [.clock, .calendar].contains(item.kind) {
+        Picker("Text weight", selection: Binding(get: { current(item).typeWeight ?? .light }, set: { weight in manager.update(item.id) { $0.typeWeight = weight } })) {
+            ForEach(WidgetTypeWeight.allCases) { Text($0.rawValue.capitalized).tag($0) }
+        }
+        }
+        LabeledContent("Corner radius") { Slider(value: Binding(get: { current(item).radius }, set: { radius in manager.update(item.id) { $0.cornerRadius = radius } }), in: 0...60).frame(maxWidth: 220).accessibilityLabel("Widget corner radius") }
+        LabeledContent("Width") { Slider(value: binding(item, \.width), in: 220...800, step: 1).frame(maxWidth: 220).accessibilityLabel("Widget width") }
+        LabeledContent("Height") { Slider(value: binding(item, \.height), in: item.minimumHeight...800, step: 1).frame(maxWidth: 220).accessibilityLabel("Widget height") }
+        Text("Desktop surfaces have no background. Choose white or black text to suit your wallpaper; edit mode always reveals the move and hide controls.").font(.caption).foregroundStyle(.secondary)
         TextField("Custom title", text: Binding(get: { current(item).title ?? "" }, set: { text in manager.update(item.id) { $0.title = String(text.prefix(80)) } }))
         Picker("Theme", selection: binding(item, \.theme)) {
             ForEach(DesktopWidgetTheme.allCases) { Text($0.rawValue.capitalized).tag($0) }
@@ -96,7 +118,7 @@ struct WidgetSettingsView: View {
         }
         if item.kind != .analogClock && item.kind != .calculator {
             LabeledContent("Text size", value: "\(Int(current(item).textSize)) pt")
-            Slider(value: Binding(get: { current(item).textSize }, set: { size in manager.update(item.id) { $0.fontSize = size.rounded() } }), in: 10...64, step: 1)
+            Slider(value: Binding(get: { current(item).textSize }, set: { size in manager.update(item.id) { $0.fontSize = size.rounded() } }), in: 10...item.maximumTextSize, step: 1)
                 .accessibilityLabel("Widget text size")
         }
         LabeledContent("Opacity") { Slider(value: binding(item, \.opacity), in: 0.2...1).frame(maxWidth: 220).accessibilityLabel("Widget opacity") }
@@ -123,6 +145,7 @@ struct WidgetSettingsView: View {
             Toggle("Show seconds", isOn: option(item, \.showSeconds))
             if item.kind == .clock { Toggle("24-hour clock", isOn: option(item, \.use24Hour)) }
             Toggle("Show date", isOn: option(item, \.showDate))
+            if item.kind == .clock { Toggle("Show time zone", isOn: option(item, \.showTimeZone)) }
             Picker("Time zone", selection: Binding(get: { current(item).displayOptions.clockTimeZoneIdentifier ?? "" }, set: { zone in
                 manager.update(item.id) { value in var options = value.displayOptions; options.clockTimeZoneIdentifier = zone.isEmpty ? nil : zone; value.options = options }
             })) {
