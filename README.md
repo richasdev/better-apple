@@ -116,7 +116,7 @@ O procedimento de julgamento a cada mudança e seus limites estão em [UX_REVIEW
 
 Calendário só pede acesso após o botão de conexão. Abra Apple Music ou Spotify antes de conectar; o macOS pode solicitar Automation para cada player. Negativas geram mensagem de erro e exigem reconexão explícita. Ajustes de permissões ficam em **System Settings → Privacy & Security**.
 
-Nenhuma função atual exige administrador, Accessibility ou Screen Recording. A Dock nativa não é alterada. Para ocultá-la, use a opção oficial de ocultação automática em **System Settings → Desktop & Dock**. Arte remota do Spotify é carregada do endereço HTTPS fornecido pelo player; não há coleta ou servidor do BetterApple.
+Nenhuma função atual exige administrador, Accessibility ou Screen Recording. A Dock nativa só é alterada quando você ativa **Replace macOS Dock**: o BetterApple liga a ocultação automática suportada (System Events, permissão Automation) e restaura o valor anterior ao desativar ou encerrar normalmente. Não há API pública para remover a Dock: ela continua podendo reaparecer quando o ponteiro toca a borda. Arte remota do Spotify é carregada do endereço HTTPS fornecido pelo player; não há coleta ou servidor do BetterApple.
 
 Notas e preferências são armazenadas em UserDefaults no Mac. Exportações JSON incluem notas e caminhos de aplicativos. Temporizadores e eventos lidos não são enviados a serviços externos. O registro de login é gerenciado por `SMAppService`; importar um JSON não concede permissões nem altera esse registro.
 
@@ -161,3 +161,13 @@ O notch agora abre um painel horizontal de560×140pt com música e calendário l
 Quando um player autorizado tem uma faixa, o notch recolhido ganha duas laterais de44pt: capa real e símbolo estático de reprodução/pausa, reservando o centro físico da câmera. Sem faixa, volta à silhueta discreta. Em monitor comum, a altura recolhida continua limitada à barra superior. A música mantém seu único polling visível de2s; o símbolo não simula amplitude de áudio.
 
 **Audio output and low battery notices** usa callbacks públicos CoreAudio/IOPS, sem polling, novas permissões ou avisos iniciais. Troca real da saída de áudio mostra o dispositivo; bateria interna avisa ao cruzar20% em descarga. Avisos curtos duram4s, sem tomar teclado. Bluetooth continua opt-in separado. Não foram implementados controle de ruído/bateria privada dos AirPods, espelho de câmera ou leitura global de Focus. A imagem enviada é referência visual, não uma garantia de APIs presentes no macOS.
+
+## Notch hover e Dock nativa — 0.7.1
+
+Referência comportamental: [boring.notch](https://github.com/TheBoredTeam/boring.notch) (GPL-3.0). Nada do código, assets, MediaRemote ou APIs privadas foi incorporado; apenas comportamento observável foi comparado.
+
+- **Intenção de hover:** o notch abre por hover só após 0,15s de repouso (`WorkspaceMotion.hoverIntent`). Varrer a barra de menus passando pela câmera não abre o painel. Clique continua imediato.
+- **Saída rápida do peek:** um overview aberto por hover fecha em até 0,3s após o ponteiro sair (ou antes, se o **Close delay** configurado for menor). Overview/ferramentas abertos por clique, atalho ou seleção mantêm o atraso configurado. Fechamento é adiado enquanto um menu (Tools/player) está aberto e rearmado quando ele fecha.
+- **Quase escondido:** em telas com câmera, o recolhido pinta apenas a altura do notch físico; a faixa de 4pt abaixo permanece janela invisível de hover. Em monitor sem câmera, a altura recolhida não excede a barra de menus.
+- **Calendário no Release:** o build com hardened runtime não tinha o entitlement `com.apple.security.personal-information.calendars`; o macOS negava o calendário sem mostrar pedido. Agora o pedido pode aparecer.
+- **Replace macOS Dock:** corrigido. NSAppleScript entrega booleanos AppleScript como `typeTrue`/`typeFalse`, e o adaptador aceitava só `typeBoolean`; toda resposta real virava “unexpected Dock setting” e a Dock nunca era ocultada.

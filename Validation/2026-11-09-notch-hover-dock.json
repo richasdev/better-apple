@@ -1,0 +1,72 @@
+{
+  "builds": {
+    "Debug": "passed (private DerivedData)",
+    "Release": "passed (build/), entitlements: apple-events, personal-information.calendars"
+  },
+  "captureInspection": {
+    "notch-wings-0 (built-in, 2x)": "window 37 pt, painted 33 pt (= safe-area top), bottom 4 pt transparent, centre sRGB 0,0,0",
+    "notch-wings-1 (LG ULTRAWIDE, 1x)": "30 pt fully painted = measured menu bar",
+    "overview-playing-layout": "560x140 music + calendar legible; fixture player, 'Connect Calendar' empty state"
+  },
+  "coreTests": {
+    "executed": 30,
+    "failures": 0
+  },
+  "date": "2026-11-09",
+  "limits": [
+    "Hover checks call the same handler as tracking-area hover; physical pointer feel/timing not measured",
+    "No FPS/CPU/RAM measurement",
+    "Native Dock still reveals at screen edge (supported auto-hide only); bottom-edge overlap with BetterApple Dock",
+    "No live playback/Calendar authorization exercised; fixtures only",
+    "boring.notch comparison is behavioral; no GPL code/assets/private APIs used"
+  ],
+  "nativeDock": {
+    "fake": "35 isolated smoke checks incl. real local NSAppleScript descriptors (fails on previous code)",
+    "finalUserPreference": "autohide false (baseline restored); nativeDock.replacementWanted absent",
+    "notTested": "Toggle clicked inside rebuilt Release app: ad-hoc code hash changed, macOS may re-ask Automation (human click).",
+    "realControlledRun": {
+      "afterRestore": {
+        "LG ULTRAWIDE bottomReservePt": 87,
+        "autohide": 0,
+        "journal": "cleared"
+      },
+      "baseline": {
+        "Built-in bottomReservePt": 0,
+        "LG ULTRAWIDE bottomReservePt": 87,
+        "autohide": 0
+      },
+      "duringReplacement": {
+        "Built-in bottomReservePt": 0,
+        "LG ULTRAWIDE bottomReservePt": 0,
+        "autohide": 1,
+        "enableSeconds": 0.13
+      },
+      "identity": "terminal process (Orca Automation grant), actual NativeDockService + SystemEventsNativeDockAccess, isolated journal suite"
+    },
+    "rootCause": "NSAppleScript returns AppleScript booleans as typeTrue/typeFalse ('true'/'fals'); SystemEventsNativeDockAccess accepted only typeBoolean, so every real reply threw invalidResponse before any write. Evidence: real Release prefs lacked nativeDock.replacementWanted; unified log shows Dock GetBooleanPreference after toggles with no Set; local probe 'return autohide of dock preferences' -> 'fals'."
+  },
+  "nativeHarnesses": {
+    "command": "python3 Scripts/validate_native.py",
+    "nativeDockChecks": 35,
+    "notes": "widget harness compile break from 0.7.0 fixed (dashboard excluded)",
+    "result": "all passed"
+  },
+  "release": {
+    "path": "build/Build/Products/Release/BetterApple.app",
+    "pid": 10864,
+    "version": "0.7.1 (11)"
+  },
+  "runtime": {
+    "checkCount": 120,
+    "command": "Debug --validate (isolated suite app.betterapple.validation, nativeDockChangesAllowed=false)",
+    "failed": [],
+    "newChecks": [
+      "collapsed notch paints only the camera band",
+      "deliberately opened overview keeps the configured close delay",
+      "hover-revealed overview collapses quickly on exit despite long close delay",
+      "menu-bar sweep shorter than hover intent does not open"
+    ],
+    "passed": true
+  },
+  "version": "0.7.1 (11)"
+}

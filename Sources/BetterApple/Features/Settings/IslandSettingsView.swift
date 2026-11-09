@@ -90,6 +90,8 @@ struct IslandSettingsView: View {
                 }
                 slider("Close delay · 0 keeps open", value: $model.settings.island.autoCloseDelay, range: 0...10, format: .seconds)
                 slider("Animation duration", value: $model.settings.island.visual.animationDuration, range: 0...0.8, format: .seconds)
+                Text("Hover opens after a short rest on the notch, so passing over the menu bar does not open it; click opens immediately. An overview opened by hover closes within 0.3 s after the pointer leaves; tools you open deliberately use the close delay.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Pin the expanded Island to keep it open. Escape closes it. Reduce Motion and Reduce Transparency follow macOS Accessibility settings.")
                     .font(.caption).foregroundStyle(.secondary)
             }

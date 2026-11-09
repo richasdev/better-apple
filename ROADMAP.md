@@ -153,3 +153,12 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [x] Event-driven Mac low battery and default-audio-output notices.
 - [ ] Certify hardware callbacks, live playback, full-screen Spaces and physical hover on supported macOS versions.
 - [ ] AirPods private battery/noise-control and general Focus integration remain outside implemented public integrations.
+
+## 0.7.1 — notch hover and native Dock repair
+- [x] Hover intent dwell; transient hover peek exits quickly; menus defer closing.
+- [x] Collapsed camera cap painted at notch height only; no-camera cap bounded by menu bar.
+- [x] Calendars entitlement for hardened Release.
+- [x] Replace macOS Dock writes autohide for real (AppleScript true/false descriptors) with real write/restore evidence.
+- [ ] Human confirmation of Automation prompt and toggle inside the rebuilt Release app.
+- [ ] Optional: move native Dock to another edge to avoid shared bottom-edge reveal (second journaled preference).
+- [ ] Physical hover/timing feel, VoiceOver and profiling with real content.

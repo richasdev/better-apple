@@ -96,3 +96,7 @@ Nenhuma nova medição de CPU/RSS/FPS do workspace 0.6 é apresentada nesta etap
 
 ## Notch overview and events — 0.7.0
 The overview shares existing player/calendar services. Cap projection ignores position-only metadata updates; artwork references and play-state publish only on change. Music remains one2s visible/authorized poll, including a visible compact cap; disconnect/occlusion/sleep remove demand. No decorative waveform timer or display-link was introduced. System output and power use CoreAudio/IOPS events with a silent baseline and idempotent teardown. Geometry/content transitions use existing WorkspaceMotion and system Reduce Motion. No new measured CPU/RSS/FPS result is claimed by these builds or internal captures.
+
+## 0.7.1
+
+Hover intent adds one cancellable sleep task per pointer entry; menu tracking rearm is notification-driven. No polling, display link or continuous animation was added. Native Dock operations remain rare serialized System Events calls (measured enable round trip 0.13 s in a controlled run). No new CPU/RAM/FPS measurements.
