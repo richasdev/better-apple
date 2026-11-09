@@ -8,7 +8,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets", "dock-motion", "widget-motion", "notch-shape", "bluetooth", "native-dock", "youtube"], default="all")
+parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets", "dock-motion", "widget-motion", "notch-shape", "bluetooth", "native-dock", "youtube", "system-notices"], default="all")
 selection = parser.parse_args().only
 architecture = platform.machine()
 if architecture not in {"arm64", "x86_64"}:
@@ -48,6 +48,7 @@ with tempfile.TemporaryDirectory(prefix="betterapple-native-check-") as temporar
     checks["widget-motion"] = (checks["widgets"][0], "widget-motion-smoke.swift")
     checks["notch-shape"] = ([root / "Sources/BetterApple/Features/DynamicIsland/IslandState.swift",
                               root / "Sources/BetterApple/Features/DynamicIsland/CameraCapView.swift"], "notch-shape-smoke.swift")
+    checks["system-notices"] = ([root / "Sources/BetterApple/Services/SystemEventNoticeService.swift"], "system-notice-smoke.swift")
     checks["youtube"] = ([root / "Sources/BetterApple/Services/MusicPlayerAdapter.swift",
                             root / "Sources/BetterApple/Services/YouTubeMusicAdapter.swift"], "youtube-smoke.swift")
     checks["bluetooth"] = ([root / "Sources/BetterApple/Services/BluetoothConnectionService.swift"], "bluetooth-smoke.swift")
