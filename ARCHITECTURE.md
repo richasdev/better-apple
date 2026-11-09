@@ -90,3 +90,21 @@ CameraIslandGeometry agora usa o mesmo caminho para hardware e notch visual: fai
 NotchCapShape desenha os ombros côncavos e os cantos inferiores recolhidos; IslandOutline deixa o topo do corpo reto e arredonda somente a base. Cap e corpo usam containers NSView com autoresizing, isolando o dimensionamento AppKit do hosting SwiftUI. O NSAnimationContext move as duas janelas com a mesma curva/duração e a reconciliação imediata substitui também alvos pendentes do animator.
 
 A silhueta larga passa deliberadamente pela área central da barra de menus, como solicitado na referência. A opção de participação em fullscreen continua explícita. O desenho não usa câmera, API privada, janela transparente de tela inteira nem polling extra.
+
+## Módulos da Dock e estilos de desktop (0.6)
+
+DockActivitySources injeta as instâncias compartilhadas de MusicService, SystemStatusService e TimerService. DockModule e DockContentMetrics resolvem lista/ordem e a mesma geometria para SwiftUI/AppKit em cada eixo. activeModules exige feature ligada, painel visível/não ocluído e área revelada. O coordenador agrega essa demanda às superfícies existentes; nenhum módulo cria um timer global próprio. Dock note é local, limitada a 100000 caracteres e opcional na suíte JSON.
+
+Widgets guardam estilos opcionais para decodificar documentos antigos como Card. Presets alteram somente o item selecionado, preservando conteúdo e origem. Superfícies Desktop não desenham fundo; Pure black usa sRGB zero com texto branco e opacidade 1. Aparência nativa e ambiente SwiftUI são explícitos para evitar texto escuro herdado sobre preto. Tamanhos compactos reduzem padding/cabeçalhos, mantendo controles de edição.
+
+CameraScreenMetrics recebe menuBarHeight de NSStatusBar; em telas sem recorte, usa a reserva de visibleFrame ou esse fallback público quando a barra está oculta. O estado recolhido tem cap da altura exata da barra e corpo de altura zero; a expansão continua abaixo dela. O MacBook mantém a borda física de4pt. A altura adaptativa é limitada por expandedHeight e pode ser desligada.
+
+## Eventos e preferências do sistema (0.6)
+
+BluetoothConnectionService usa registros IOBluetooth públicos, um receiver fraco e ledger de identidades local para baseline silencioso/deduplicação/reconexão. stop remove todos os registros. Nenhum identificador é exportado. O coordenador monitora somente com Island/avisos ligados e fora de sleep. Debug --validate desliga acesso ao hardware; testes de UI injetam eventos de apresentação explicitamente. O aviso tem prazo finito, não toma teclado e não inicia dados de módulo quando compacto.
+
+NativeDockService serializa a posse transacional da única preferência autohide por System Events. A baseline própria é registrada/flush uma vez antes de cada tentativa de mutação, sem polling; isso é um journal de melhor esforço, sem garantia de perda de energia. A restauração verifica o valor e conserva baseline em falha. O coordenador ativa a Dock em todas as telas somente após confirmação e restaura se o master for desligado. A opção de sistema fica fora do JSON para não disparar automação por importação.
+
+O encerramento usa duas etapas: cancela a primeira solicitação enquanto a restauração assíncrona termina e repete com aprovação interna. Isso evita prender um Task MainActor no loop aninhado de terminateLater. Sem baseline/ação pendente, encerra imediatamente. Falhas reais oferecem Cancel Quit/ Quit Anyway. Testes usam um adaptador de preferências isolado e não chamam System Events.
+
+Marca original em Resources/Logo; package_icons.py empacota a variante escura em ICNS com ferramentas nativas. O gerador inclui Logo e ICNS no bundle. BrandMark escolhe a variante pela aparência; o ícone do aplicativo é atualizado por KVO, sem polling.

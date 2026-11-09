@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.5.0**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.6.0**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -38,6 +38,34 @@ O projeto Xcode está versionado. Após adicionar/remover arquivos Swift do apli
 
 “Implementado” descreve código integrado; veja [ROADMAP.md](ROADMAP.md) para as verificações executadas e os fluxos ainda não validados interativamente. O timer é compartilhado entre Island e widgets e não sobrevive ao encerramento do aplicativo.
 
+## Workspace modular (0.6)
+
+Em **Dock**, escolha **Floating tiles** ou **Continuous rail**. Os presets de referência adicionam blocos reais de aplicativos, música, timer, bateria e nota; você pode ativá-los e alterar sua ordem. As integrações usam os mesmos serviços da Island/widgets. A nota fica local e entra no JSON. O preset **Pure black** usa preto sRGB `#000000`, opacidade total e conteúdo claro; vidro continua disponível separadamente. O timer tem duração selecionável, início, pausa/retomada e cancelamento.
+
+**Automatically hide** recolhe a Dock ao sair com o cursor, mesmo depois de editar a nota. Menus e composição IME continuam protegidos. A atualização ativa essa preferência uma única vez; alterações posteriores do usuário são mantidas.
+
+Em **Widgets**, cada item tem superfícies Card, Glass ou Desktop sem fundo, tinta, peso, tamanho, cantos e cabeçalho. Use **Desktop clock** para relógio grande com data/fuso, **Minimal status** para barras compactas e **Pure black** para fundo preto sólido. Notas, posições e visibilidade ficam preservadas. Relógios podem usar até 200 pt; os indicadores compactos chegam a 72 pt de altura. Os dados de CPU/RAM/bateria/música permanecem reais; não foram adicionados valores demonstrativos de bolsa, clima, temperatura ou ventoinha.
+
+A Island usa aparência escura nativa para manter os controles legíveis sobre preto e ajusta a altura ao módulo, com limite configurável e alternativa fixa. Em monitor sem câmera, o notch recolhido cabe inteiramente na barra superior medida, sem os 4 pt extras usados no MacBook.
+
+## Usar como Dock principal
+
+Em **Dock → macOS Dock → Replace macOS Dock**, o BetterApple ativa sua Dock em todas as telas e habilita o auto-hide nativo por Apple Events/System Events. O macOS pode pedir Automation. A preferência anterior é guardada antes da alteração, verificada e restaurada ao desativar ou encerrar normalmente. Desligar a Dock do BetterApple também pede restauração. A opção de substituição não é ativada por importar JSON.
+
+A Dock do macOS pode reaparecer na borda: a opção utiliza o ocultamento suportado, sem remover serviços, encerrar a Dock ou editar arquivos protegidos. Erros mantêm os dados de recuperação e oferecem restauração. Uma falha de restauração ao sair mostra um aviso com opção de cancelar o encerramento. A escolha é lembrada para a próxima abertura.
+
+## Bluetooth e AirPods
+
+**Dynamic Island → Bluetooth connection notices** mostra nome, símbolo e conexão/desconexão em um aviso de quatro segundos. Passar o ponteiro não solicita teclado; clicar abre os controles normais. Um evento durante a edição mantém o conteúdo do módulo.
+
+Usa notificações públicas de conexão Bluetooth Classic, sem scan ou pareamento e sem avisos falsos para dispositivos já conectados ao iniciar. BLE-only, abertura do estojo e bateria individual dos AirPods não são cobertos por essa integração. A permissão é controlada pelo macOS. A UI e o ledger foram testados sem iniciar hardware; uma conexão física ainda precisa de verificação.
+
+## Fluidez e identidade
+
+A UI permanece SwiftUI/AppKit, sem backend Rust. Swift/Core Animation já oferecem animação nativa adaptada ao display; Rust só se justificará por um gargalo de cálculo medido. **Performance** mostra a capacidade das telas. Até 120 Hz em painel compatível não significa 120 FPS medidos. True Tone é um ajuste de tela do macOS, separado do preto sRGB usado pelo app.
+
+A nova maçã dourada original aparece no ícone do bundle e na UI, com variantes clara/escura. O ícone Finder é estático para compatibilidade com macOS 14; a imagem do aplicativo e as marcas da interface acompanham a aparência. Após mudar a arte, rode `python3 Scripts/package_icons.py` antes de regenerar/compilar.
+
 ## Silhueta Notchy (0.5)
 
 A parte superior e o corpo animam juntos com a mesma curva e duração, mantendo o topo imóvel. Uma sobreposição preta de 4 pt evita costuras; a parte de cima não toma foco e usa o mesmo hover do conteúdo. Em todas as telas o desenho é preso à borda superior, incluindo monitores sem câmera. O modo Floating continua disponível com os ajustes anteriores. Nenhuma imagem ou código do aplicativo de referência foi incorporado.
@@ -58,7 +86,7 @@ O JSON exporta as três escolhas. Importações antigas sem `widgetsEnabled` man
 
 O posicionamento **Camera** usa uma silhueta preta de notch presa ao topo, com cantos superiores côncavos e inferiores arredondados. No MacBook, alinha-se ao recorte físico e deixa uma borda de 4 pontos quando recolhido. Ao passar o ponteiro, o conteúdo expande para baixo sem solicitar foco de teclado; clicar abre e prepara os controles. Sair recolhe após o atraso configurado, respeitando pin e edição. A câmera não é acessada nem exige permissão.
 
-O recorte é medido pelas áreas auxiliares públicas de `NSScreen`. A parte superior acompanha a largura do corpo ao expandir; os controles ficam abaixo da faixa da câmera/barra. Em monitores sem notch, desenha o mesmo formato no topo, usando 185 pt como largura compacta e uma faixa superior mínima de 32 pt. A área central da barra fica coberta pelo notch desenhado, incluindo durante a expansão. Com apenas uma Island, a tela com notch tem preferência sobre um monitor externo principal.
+O recorte é medido pelas áreas auxiliares públicas de `NSScreen`. A parte superior acompanha a largura do corpo ao expandir; os controles ficam abaixo da faixa da câmera/barra. Em monitores sem notch, desenha o mesmo formato no topo, usando 185 pt como largura compacta e a altura da barra superior do monitor. A área central da barra fica coberta pelo notch desenhado, incluindo durante a expansão. Com apenas uma Island, a tela com notch tem preferência sobre um monitor externo principal.
 
 O modo Camera usa preto opaco para combinar com o recorte. Em **Dynamic Island → Placement → Floating**, continuam disponíveis deslocamentos, vidro, opacidade e temas armazenados. A atualização ativa Camera e hover uma única vez, preservando widgets, notas e preferências visuais; escolhas posteriores são respeitadas.
 

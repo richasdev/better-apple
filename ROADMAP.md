@@ -121,3 +121,19 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [x] Geometria física/sintética, coordenadas negativas, limites e reversões verificados.
 - [x] Smoke de paths SwiftUI e inspeção de raster offscreen do contorno.
 - [ ] Conferir composição física sobre menus e interação em diferentes versões macOS/Spaces.
+
+## Workspace de referência — 0.6
+
+- [x] Dock modular com apps/música/timer/bateria/nota, ordem e estilos Floating/Rail.
+- [x] Shared services com demanda por visibilidade; nota local e JSON compatível.
+- [x] Estilos/presets Desktop clock, Minimal status, Glass e Pure black; tipografia, cores, raio e cabeçalho por widget.
+- [x] Contraste nativo em preto corrigido, auto-hide após editar e altura adaptativa da Island.
+- [x] Notch sintético recolhido limitado à altura real da barra superior.
+- [x] Avisos Bluetooth Classic passivos e efêmeros, sem bateria privada dos AirPods.
+- [x] Opção Replace macOS Dock por auto-hide suportado, journal/erro/restauração e todas as telas.
+- [x] Logo original integrada ao bundle e interface clara/escura.
+- [x] Capacidade de refresh das telas apresentada; animações nativas e Reduce Motion preservados.
+- [ ] Testar conexão física de AirPods/Bluetooth, permissão negada e dispositivos BLE-only compatíveis com futura alternativa pública.
+- [ ] Testar Automation e restauração da Dock real por escolha do usuário; testes automatizados usaram adaptador isolado.
+- [ ] Medir FPS/hitches nos cenários novos; 120 Hz de capacidade não comprova 120 FPS.
+- [ ] Novos indicadores de clima/bolsa/armazenamento/fan da referência não foram implementados nesta etapa.

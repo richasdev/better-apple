@@ -81,3 +81,15 @@ Cap e corpo existem também no monitor sem câmera; há uma janela adicional em 
 Medição isolada (2026-11-09, mesma máquina, `swiftc -O`, só compilação; execução exige Automation): o script de snapshot do Apple Music custa **~111 ms** na primeira compilação (carga do componente AppleScript) e **~0,9 ms** em cada recompilação seguinte. O polling de 2 s recompilava o script a cada leitura. `MusicService` agora mantém os scripts compilados na fila serial de scripts (limpa ao atingir 32 entradas, pois seek/volume embutem valores) e só escreve `@Published` quando o valor muda; com player pausado ou parado, o poll não invalida mais as views observadoras.
 
 Validação: build Release, `swift test` (26 testes, 0 falhas), harnesses nativos `services` e `widgets`, e verificação de reuso de `NSAppleScript` compilado em 5 execuções. Não houve execução contra Music/Spotify reais nem nova medição de CPU/RSS do app: o ganho no app é estimado pelo microbenchmark, não medido.
+
+## Workspace modular e refresh adaptativo — 0.6
+
+Dock, Island e widgets compartilham MusicService/SystemStatusService/TimerService. A demanda da Dock exige painel não ocluído, ativo e revelado. Avisos Bluetooth usam callbacks IOBluetooth passivos, sem scan ou polling. A alteração do autohide nativo acontece somente por escolha explícita e operações raras serializadas de System Events. Não há backend ou dependência Rust.
+
+As animações usam SwiftUI/AppKit/Core Animation com duração finita e Reduce Motion, sem timer de 120 Hz. A [Apple documenta que esses frameworks adaptam animações ao refresh da tela](https://developer.apple.com/documentation/xcode/improving-app-responsiveness). Settings mostra NSScreen.maximumFramesPerSecond como capacidade, sem medir FPS efetivo. Hitches precisam de medição com [Instruments/SwiftUI](https://developer.apple.com/documentation/xcode/understanding-and-improving-swiftui-performance).
+
+Manter Swift é uma decisão de engenharia deste projeto, não um benchmark Swift versus Rust. As integrações já usam filas e o trabalho a avaliar é atualização, layout e renderização. Uma biblioteca Rust local só deve ser considerada se um gargalo de cálculo medido justificar a integração.
+
+Preto opaco usa sRGB 0,0,0; vidro conserva transparência por escolha do usuário. [True Tone adapta cor/intensidade à luz ambiente](https://support.apple.com/en-gb/102147) e permanece sob controle do macOS. Não alteramos perfil de cor, brilho ou refresh do sistema.
+
+Nenhuma nova medição de CPU/RSS/FPS do workspace 0.6 é apresentada nesta etapa. O microbenchmark acima não demonstra 120 FPS, consumo dos blocos novos, ausência de leaks ou uso comum abaixo de 100 MB. Capturas internas e checks de geometria não substituem profiling do compositor em monitor de 120 Hz. A carga Debug --validate --profile-motion agora inclui Dock modular, dois widgets reais e vinte ciclos finitos da Island; futuros resultados devem indicar otimização, escopo e oclusão.
