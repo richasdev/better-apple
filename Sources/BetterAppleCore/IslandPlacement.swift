@@ -34,7 +34,7 @@ public struct IslandWindowLayout: Equatable, Sendable {
 
 public enum CameraIslandGeometry {
     public static func layout(screen metrics: CameraScreenMetrics, expanded: Bool,
-                              expandedWidth: Double, expandedHeight: Double) -> IslandWindowLayout {
+                              expandedWidth: Double, expandedHeight: Double, compactExtension: Double = 0) -> IslandWindowLayout {
         let screen = metrics.screenFrame
         guard usable(screen) else {
             return .init(frame: .zero, bodyFrame: .zero, capFrame: nil, topInset: 0, cameraWidth: 0, cameraHeight: 0, hasNotch: false, anchored: true)
@@ -56,7 +56,8 @@ public enum CameraIslandGeometry {
         let maximumBodyWidth = max(0, screen.width - shoulder * 2)
         let cameraWidth = min(maximumBodyWidth, cameraGap?.width ?? 185)
         let requestedWidth = expandedWidth.isFinite ? max(1, expandedWidth) : 420
-        let bodyWidth = min(maximumBodyWidth, expanded ? max(requestedWidth, cameraWidth + 32) : cameraWidth)
+        let wings = compactExtension.isFinite ? min(160, max(0, compactExtension)) : 0
+        let bodyWidth = min(maximumBodyWidth, expanded ? max(requestedWidth, cameraWidth + 32) : cameraWidth + wings)
         let capWidth = min(screen.width, bodyWidth + shoulder * 2)
         let center = cameraGap?.midX ?? screen.midX
         let capX = bounded(center - capWidth / 2, screen.minX, screen.maxX - capWidth)

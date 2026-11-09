@@ -171,6 +171,22 @@ final class IslandPlacementTests: XCTestCase {
         XCTAssertEqual(layout.frame.maxY, cap.maxY, file: file, line: line)
         XCTAssertEqual(layout.frame.minY, layout.bodyFrame.minY, file: file, line: line)
     }
+    func testMusicWingsReserveCameraAndNeverIncreaseCollapsedMenuBand() {
+        for safeTop in [0.0, 32.0] {
+            let screen = CGRect(x: -1200, y: 50, width: 1200, height: 800)
+            let metrics = CameraScreenMetrics(screenFrame: screen, visibleFrame: CGRect(x: -1200, y: 50, width: 1200, height: 770), safeAreaTop: safeTop, menuBarHeight: 30)
+            let idle = CameraIslandGeometry.layout(screen: metrics, expanded: false, expandedWidth: 560, expandedHeight: 140)
+            let music = CameraIslandGeometry.layout(screen: metrics, expanded: false, expandedWidth: 560, expandedHeight: 140, compactExtension: 88)
+            XCTAssertEqual(music.cameraWidth, idle.cameraWidth)
+            XCTAssertEqual(music.capFrame?.height, idle.capFrame?.height)
+            XCTAssertEqual(music.capFrame!.midX, idle.capFrame!.midX)
+            XCTAssertEqual(music.capFrame!.width - idle.capFrame!.width, 88)
+            XCTAssertEqual(music.bodyFrame.height, idle.bodyFrame.height)
+            assertBounds(music.frame, in: screen)
+            let invalid = CameraIslandGeometry.layout(screen: metrics, expanded: false, expandedWidth: 560, expandedHeight: 140, compactExtension: .nan)
+            XCTAssertEqual(invalid, idle)
+        }
+    }
     private func assertBounds(_ rect: CGRect, in screen: CGRect, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertGreaterThanOrEqual(rect.minX, screen.minX, file: file, line: line)
         XCTAssertGreaterThanOrEqual(rect.minY, screen.minY, file: file, line: line)

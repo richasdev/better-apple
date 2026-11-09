@@ -45,6 +45,16 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var placement: IslandPlacement?
     public var connectionNotifications: Bool?
     public var dynamicHeight: Bool?
+    public var overviewOnHover: Bool?
+    public var systemNotices: Bool?
+    public var systemNoticesEnabled: Bool {
+        get { systemNotices ?? true }
+        set { systemNotices = newValue }
+    }
+    public var overviewOnHoverEnabled: Bool {
+        get { overviewOnHover ?? true }
+        set { overviewOnHover = newValue }
+    }
     public var dynamicHeightEnabled: Bool {
         get { dynamicHeight ?? true }
         set { dynamicHeight = newValue }
