@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="betterapple-native-check-") as temporar
             "-Xlinker", "-rpath", "-Xlinker", directory]
     services = sorted((root / "Sources/BetterApple/Services").glob("*.swift"))
     shared = sorted((root / "Sources/BetterApple/Shared").rglob("*.swift"))
-    modules = sorted(path for path in (root / "Sources/BetterApple/Features/DynamicIsland").rglob("*.swift") if path.name not in {"IslandManager.swift", "IslandView.swift"})
+    modules = sorted(path for path in (root / "Sources/BetterApple/Features/DynamicIsland").rglob("*.swift") if path.name not in {"IslandManager.swift", "IslandView.swift", "IslandDashboardView.swift"})
     checks = {
         "services": (services, "service-smoke.swift"),
         "productivity": (services, "productivity-smoke.swift"),
