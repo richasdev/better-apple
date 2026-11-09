@@ -20,7 +20,7 @@ enum NativeDockError: LocalizedError {
         case .journalFailed:
             return "Your previous Dock setting could not be saved. The native Dock was not changed by this request."
         case .scripting(let code, let message):
-            return code == -1712 ? "System Events did not respond in time. Your saved Dock setting is kept; try again." : message
+            return code == -1712 ? "System Events did not respond in time. If macOS asked for Automation permission, allow it, then try again. Your saved Dock setting is kept." : message
         }
     }
 }
@@ -47,10 +47,22 @@ struct SystemEventsNativeDockAccess: NativeDockPreferenceAccess {
                     let code = (error[NSAppleScript.errorNumber] as? Int) ?? -1
                     let message = (error[NSAppleScript.errorMessage] as? String) ?? "The macOS Dock setting could not be updated."
                     continuation.resume(throwing: code == -1743 ? NativeDockError.denied : NativeDockError.scripting(code, message))
-                } else if descriptor.descriptorType == typeBoolean {
-                    continuation.resume(returning: descriptor.booleanValue)
+                } else if let value = Self.boolean(from: descriptor) {
+                    continuation.resume(returning: value)
                 } else { continuation.resume(throwing: NativeDockError.invalidResponse) }
             }
+        }
+    }
+
+    /// AppleScript booleans arrive as `typeTrue`/`typeFalse` ('true'/'fals'),
+    /// not `typeBoolean`. Requiring only `typeBoolean` rejected every real
+    /// System Events reply, so Replace macOS Dock never wrote autohide.
+    nonisolated static func boolean(from descriptor: NSAppleEventDescriptor) -> Bool? {
+        switch descriptor.descriptorType {
+        case typeTrue: return true
+        case typeFalse: return false
+        case typeBoolean: return descriptor.booleanValue
+        default: return nil
         }
     }
 }

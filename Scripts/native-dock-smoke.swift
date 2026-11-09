@@ -150,6 +150,15 @@ private actor FakeNativeDockAccess: NativeDockPreferenceAccess {
         check(await queuedAccess.writes == [true, false], "An off request during enable must serialize after it")
         let queuedValue = await queuedAccess.current()
         check(!queued.desiredEnabled && !queued.isActive && !queued.isBusy && !queuedValue, "Queued disable must leave the original Dock restored")
+        // Real NSAppleScript descriptors (local, no System Events): AppleScript
+        // booleans are typeTrue/typeFalse, which the parser must accept.
+        for (source, expected) in [("return true", true), ("return false", false)] {
+            var error: NSDictionary?
+            let descriptor = NSAppleScript(source: source)!.executeAndReturnError(&error)
+            check(error == nil && SystemEventsNativeDockAccess.boolean(from: descriptor) == expected, "Real AppleScript boolean '\(source)' must parse")
+        }
+        check(SystemEventsNativeDockAccess.boolean(from: NSAppleEventDescriptor(boolean: true)) == true, "typeBoolean must still parse")
+        check(SystemEventsNativeDockAccess.boolean(from: NSAppleEventDescriptor(string: "true")) == nil, "Text is not a Dock setting")
         print("PASS: \(count) isolated native Dock transaction checks; opt-in, verification, original true/false, persistence/crash recovery, queued requests, permission errors and quit restoration. No System Events or user Dock mutation.")
     }
 }
