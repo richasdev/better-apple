@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.6.0**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.6.1**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -143,3 +143,13 @@ Para uma sequência finita de 20 ciclos destinada ao Instruments, use o build De
 ```
 
 Esse modo utiliza preferências isoladas, respeita Reduce Motion e grava seu resultado em `/tmp/BetterApple-motion-profile`. A validação normal escreve o contexto de ativação e verificações não certificadas junto de seus resultados; falhas reais retornam código diferente de zero.
+
+## Island compacta e players — 0.6.1
+
+A abertura padrão passa a 360 pt de largura, com música em 150 pt sem conexão e 170 pt conectada. O cabeçalho redundante foi removido; navegação/pin/fechar ficam numa linha. A configuração anterior é reduzida uma vez, inclusive painéis grandes já salvos; escolhas manuais posteriores permanecem.
+
+No módulo Música, abra o menu do nome do player e escolha Apple Music, Spotify ou YouTube · Chrome/Safari/Brave. A escolha fica salva; uma conexão explícita abre o app desktop se necessário. Não há conexão automática nem solicitação de Automação na inicialização.
+
+YouTube usa automação local do navegador, exclusivamente em hosts YouTube, e ignora abas sem vídeo. Abra um vídeo, habilite **Allow JavaScript from Apple Events** no navegador e conecte. O botão **Browser setup…** explica onde habilitar. Safari: recursos para desenvolvedores/Developer Settings. Chrome/Brave: View → Developer. O BetterApple não modifica essa preferência. Se houver vários vídeos, usa o primeiro encontrado na ordem de janelas/abas. YouTube Music também é aceito. Próxima/anterior dependem dos botões disponíveis na página; sem anterior, reinicia o vídeo. Restrições de autoplay do navegador podem manter o vídeo pausado. Alterações de DOM do site podem exigir ajuste do adaptador.
+
+A interface continua inteiramente SwiftUI/AppKit. Essa automação não adiciona WebView, extensão, backend ou acesso a tokens. Referências: [Chromium AppleScript](https://www.chromium.org/developers/applescript/) e [Safari Developer Settings](https://developer.apple.com/documentation/safari-developer-tools/developer-settings).

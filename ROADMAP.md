@@ -137,3 +137,10 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [ ] Testar Automation e restauração da Dock real por escolha do usuário; testes automatizados usaram adaptador isolado.
 - [ ] Medir FPS/hitches nos cenários novos; 120 Hz de capacidade não comprova 120 FPS.
 - [ ] Novos indicadores de clima/bolsa/armazenamento/fan da referência não foram implementados nesta etapa.
+
+## 0.6.1 — compact playback
+- [x] Compact Island navigation and content-dependent150/170pt music layout.
+- [x] Persist player choice and launch desktop player on explicit Connect.
+- [x] YouTube/YouTube Music adapters for Chrome, Safari and Brave with exact hostguards and setup UI.
+- [x] Compile installed player/browser dictionaries; execute actual adapter JavaScript in isolated fixtures.
+- [ ] Verify actual authorized Spotify playback and each browser on supported macOS releases; fixtures do not prove live-site playback.
