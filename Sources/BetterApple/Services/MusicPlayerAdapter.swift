@@ -10,6 +10,9 @@ protocol MusicPlayerAdapter: Sendable {
     var bundleIdentifier: String { get }
     var snapshotScript: String { get }
     var artworkScript: String? { get }
+    var snapshotIsJSON: Bool { get }
+    var connectionHelp: String? { get }
+    var launchURL: URL? { get }
     func script(for command: MusicPlayerCommand) -> String
 }
 
@@ -21,6 +24,9 @@ enum MusicPlayerCommand: Sendable {
 
 extension MusicPlayerAdapter {
     var artworkScript: String? { nil }
+    var snapshotIsJSON: Bool { false }
+    var connectionHelp: String? { nil }
+    var launchURL: URL? { nil }
 
     func script(for command: MusicPlayerCommand) -> String {
         let operation: String

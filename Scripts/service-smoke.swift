@@ -30,16 +30,25 @@ struct ServiceSmoke {
         assert(!timer.isRunning && !timer.isPaused && timer.remaining == 0)
         timer.start(seconds: .nan)
         assert(!timer.isRunning)
-        let music = MusicService()
+        let musicSuite = "app.betterapple.music-smoke." + UUID().uuidString
+        let musicDefaults = UserDefaults(suiteName: musicSuite)!
+        defer { musicDefaults.removePersistentDomain(forName: musicSuite) }
+        let music = MusicService(defaults: musicDefaults)
         music.start()
         assert(!music.isConnected && music.track == nil && music.errorMessage == nil)
         music.stop()
         music.registerAdapter(AdditionalPlayerAdapter())
-        assert(music.availablePlayers.count == 3)
+        assert(music.availablePlayers.count == 6)
+        assert(music.availablePlayers.contains { $0.id == "spotify" })
+        assert(music.availablePlayers.contains { $0.id == "youtube-chrome" })
+        assert(music.availablePlayers.contains { $0.id == "youtube-safari" })
         assert(music.availablePlayers.contains { $0.id == "smoke-player" })
         music.connect(to: AdditionalPlayerAdapter())
         assert(music.selectedPlayer.id == "smoke-player")
         assert(!music.isConnected && music.errorMessage != nil)
+        assert(musicDefaults.string(forKey: "music.selectedPlayer") == "smoke-player")
+        let restoredMusic = MusicService(defaults: musicDefaults, adapters: [AdditionalPlayerAdapter()])
+        assert(restoredMusic.selectedPlayer.id == "smoke-player" && !restoredMusic.isConnected)
         music.disconnect()
         let suite = "app.betterapple.shortcut-smoke." + UUID().uuidString
         let preferences = UserDefaults(suiteName: suite)!

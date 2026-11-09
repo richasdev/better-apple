@@ -11,7 +11,7 @@ struct MusicTrack: Equatable {
     let artworkURL: URL?
 }
 
-/// Each adapter uses the player's supported AppleScript dictionary, never MediaRemote.
+/// Player dictionaries and explicitly authorized browser automation, never MediaRemote.
 @MainActor
 final class MusicService: ObservableObject {
     struct Player: Hashable, Identifiable, CaseIterable {
@@ -21,7 +21,7 @@ final class MusicService: ObservableObject {
         var rawValue: String { id }
         static let appleMusic = Player(adapter: AppleMusicAdapter())
         static let spotify = Player(adapter: SpotifyMusicAdapter())
-        static let allCases: [Player] = [.appleMusic, .spotify]
+        static let allCases: [Player] = [.appleMusic, .spotify] + YouTubeMusicAdapter.Browser.allCases.map { Player(adapter: YouTubeMusicAdapter(browser: $0)) }
 
         init(adapter: any MusicPlayerAdapter) {
             id = adapter.id
@@ -35,6 +35,9 @@ final class MusicService: ObservableObject {
     @Published private(set) var volume: Double = 0.5
     @Published private(set) var errorMessage: String?
     @Published private(set) var isConnected = false
+    @Published private(set) var isConnecting = false
+    var connectionHelp: String? { adapter.connectionHelp }
+    private let defaults: UserDefaults
     private nonisolated static let scriptQueue = AppleScriptExecution.queue
     private let queue = MusicService.scriptQueue
     private var timer: Timer?
@@ -51,8 +54,15 @@ final class MusicService: ObservableObject {
     private var adapter: any MusicPlayerAdapter = AppleMusicAdapter()
     @Published private(set) var availablePlayers: [Player] = []
 
-    init(adapters: [any MusicPlayerAdapter] = [AppleMusicAdapter(), SpotifyMusicAdapter()]) {
+    init(defaults: UserDefaults = .standard, adapters: [any MusicPlayerAdapter] = [AppleMusicAdapter(), SpotifyMusicAdapter()] + YouTubeMusicAdapter.Browser.allCases.map { YouTubeMusicAdapter(browser: $0) }) {
+        self.defaults = defaults
         for adapter in adapters { registerAdapter(adapter) }
+        let saved = defaults.string(forKey: "music.selectedPlayer")
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        if let preferred = adapters.first(where: { $0.id == saved }) ?? adapters.first(where: { $0.id == "spotify" && running.contains($0.bundleIdentifier) }) ?? adapters.first {
+            adapter = preferred
+            selectedPlayer = Player(adapter: preferred)
+        }
     }
 
     func registerAdapter(_ adapter: any MusicPlayerAdapter) {
@@ -73,8 +83,24 @@ final class MusicService: ObservableObject {
         registerAdapter(adapter)
         self.adapter = adapter
         selectedPlayer = Player(adapter: adapter)
+        defaults.set(adapter.id, forKey: "music.selectedPlayer")
         authorizedByUser = true
-        refresh()
+        guard !isPlayerRunning else { refresh(); return }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: adapter.bundleIdentifier) else {
+            errorMessage = "\(adapter.title) is not installed."
+            return
+        }
+        isConnecting = true
+        let token = generation
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { [weak self] _, error in
+            Task { @MainActor in
+                guard let self, self.generation == token else { return }
+                self.isConnecting = false
+                if let error { self.fail(error) } else { self.refresh() }
+            }
+        }
     }
 
     func disconnect() {
@@ -83,6 +109,7 @@ final class MusicService: ObservableObject {
         volumeTask?.cancel()
         seekTask?.cancel()
         isConnected = false
+        isConnecting = false
         timer?.invalidate()
         timer = nil
         artworkTask?.cancel()
@@ -138,7 +165,9 @@ final class MusicService: ObservableObject {
             errorMessage = "\(selectedPlayer.title) is not installed."
             return
         }
-        NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        if let page = adapter.launchURL {
+            NSWorkspace.shared.open([page], withApplicationAt: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+        } else { NSWorkspace.shared.openApplication(at: url, configuration: .init()) }
     }
 
     private func refresh() {
@@ -146,28 +175,39 @@ final class MusicService: ObservableObject {
         guard isPlayerRunning else {
             track = nil
             artwork = nil
-            isConnected = false
-            errorMessage = "Open \(selectedPlayer.title), then connect again."
+            fail(NSError(domain: "BetterApple.Music", code: 3, userInfo: [NSLocalizedDescriptionKey: "Open \(selectedPlayer.title), then connect again."]))
             return
         }
         busy = true
+        isConnecting = !isConnected
         let requestGeneration = generation
         let script = adapter.snapshotScript
+        let jsonSnapshot = adapter.snapshotIsJSON
         queue.async { [weak self] in
             let result = Self.execute(script)
             Task { @MainActor in
                 guard let self, self.generation == requestGeneration else { return }
                 self.busy = false
+                self.isConnecting = false
                 switch result {
                 case .failure(let error): self.fail(error)
                 case .success(let descriptor):
+                    let values: [Any]?
+                    if jsonSnapshot {
+                        guard let data = descriptor.stringValue?.data(using: .utf8),
+                              let row = try? JSONSerialization.jsonObject(with: data) as? [Any], row.count == 8 else {
+                            self.fail(NSError(domain: "BetterApple.Music", code: 2, userInfo: [NSLocalizedDescriptionKey: "The browser returned an invalid playback snapshot. Reconnect to YouTube."]))
+                            return
+                        }
+                        values = row
+                    } else { values = nil }
                     // Assign only on change: every @Published write invalidates observing views,
                     // and a paused player otherwise re-rendered them on each 2 s poll.
                     if !self.isConnected { self.isConnected = true }
                     if self.errorMessage != nil { self.errorMessage = nil }
-                    let volume = min(1, max(0, Double(descriptor.atIndex(7)?.int32Value ?? 50) / 100))
+                    let volume = min(1, max(0, (values?[6] as? Double ?? Double(descriptor.atIndex(7)?.int32Value ?? 50)) / 100))
                     if self.volume != volume { self.volume = volume }
-                    let title = descriptor.atIndex(1)?.stringValue ?? ""
+                    let title = values?[0] as? String ?? descriptor.atIndex(1)?.stringValue ?? ""
                     if title.isEmpty {
                         if self.track != nil { self.track = nil }
                         if self.artwork != nil { self.artwork = nil }
@@ -176,7 +216,7 @@ final class MusicService: ObservableObject {
                         self.artworkTask = nil
                     }
                     else {
-                        let track = MusicTrack(title: title, artist: descriptor.atIndex(2)?.stringValue ?? "", album: descriptor.atIndex(3)?.stringValue ?? "", duration: max(0, Self.number(descriptor.atIndex(4))), position: max(0, Self.number(descriptor.atIndex(5))), isPlaying: descriptor.atIndex(6)?.booleanValue ?? false, artworkURL: URL(string: descriptor.atIndex(8)?.stringValue ?? ""))
+                        let track = MusicTrack(title: title, artist: values?[1] as? String ?? descriptor.atIndex(2)?.stringValue ?? "", album: values?[2] as? String ?? descriptor.atIndex(3)?.stringValue ?? "", duration: max(0, values?[3] as? Double ?? Self.number(descriptor.atIndex(4))), position: max(0, values?[4] as? Double ?? Self.number(descriptor.atIndex(5))), isPlaying: values?[5] as? Bool ?? descriptor.atIndex(6)?.booleanValue ?? false, artworkURL: URL(string: values?[7] as? String ?? descriptor.atIndex(8)?.stringValue ?? ""))
                         if self.track != track { self.track = track }
                         if self.visible { self.loadArtwork() }
                     }
@@ -216,6 +256,7 @@ final class MusicService: ObservableObject {
     }
 
     private func fail(_ error: Error) {
+        isConnecting = false
         errorMessage = error.localizedDescription
         // Permission failure stops polling; reconnect is an explicit user action.
         isConnected = false
