@@ -20,8 +20,13 @@ import SwiftUI
         assert(expanded.contains(CGPoint(x: 196, y: 35)))
         assert(!expanded.contains(CGPoint(x: 11, y: 35)))
         var animated = NotchCapShape(bottomRadius: 10)
-        animated.animatableData = 0
+        animated.animatableData = AnimatablePair(0, 0)
         assert(animated.path(in: capRect).contains(CGPoint(x: 13, y: 35)))
+        // Collapsed inset: the bottom strip stays undrawn (invisible hover margin).
+        let inset = NotchCapShape(bottomRadius: 10, bottomInset: 4).path(in: capRect).boundingRect
+        assert(abs(inset.maxY - (capRect.maxY - 4)) < 0.01 && abs(inset.minY - capRect.minY) < 0.01)
+        let clamped = NotchCapShape(bottomRadius: 10, bottomInset: 999).path(in: capRect).boundingRect
+        assert(clamped.height >= capRect.height / 2 - 0.01)
         let translatedRect = capRect.offsetBy(dx: -500, dy: 250)
         let translated = NotchCapShape(bottomRadius: 10).path(in: translatedRect)
         assert(translated.contains(CGPoint(x: -396, y: 251)))

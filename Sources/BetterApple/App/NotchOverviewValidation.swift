@@ -58,9 +58,41 @@ enum NotchOverviewValidation {
         }
         if let cap = caps.first {
             app.island.handlePointer(true, panel: cap)
-            try await Task.sleep(for: .milliseconds(280))
+            try await Task.sleep(for: .milliseconds(430))
             checks["hover opens overview rather than detailed module"] = app.island.state.overview && app.island.state.expanded && app.island.state.focusRequest == 0
             app.island.handlePointer(false, panel: cap)
+            // Hover intent and transient peek. Calls drive the same handler as
+            // NSTrackingArea hover; they do not prove physical pointer behavior.
+            app.island.collapse()
+            app.model.settings.island.autoCloseDelay = 5
+            try await Task.sleep(for: .milliseconds(250))
+            app.island.handlePointer(true, panel: cap)
+            try await Task.sleep(for: .milliseconds(60))
+            app.island.handlePointer(false, panel: cap)
+            try await Task.sleep(for: .milliseconds(250))
+            checks["menu-bar sweep shorter than hover intent does not open"] = !app.island.state.expanded
+            app.island.handlePointer(true, panel: cap)
+            try await Task.sleep(for: .milliseconds(430))
+            let peeked = app.island.state.expanded && app.island.state.overview
+            app.island.handlePointer(false, panel: cap)
+            try await Task.sleep(for: .milliseconds(450))
+            let pointerOnSurface = NSApp.windows.contains { $0.isVisible && ($0 is IslandPanel || $0 is CameraCapPanel) && $0.isOnActiveSpace && $0.frame.contains(NSEvent.mouseLocation) }
+            checks["hover-revealed overview collapses quickly on exit despite long close delay"] = peeked && (pointerOnSurface ? app.island.state.expanded : !app.island.state.expanded)
+            app.island.showOverview()
+            try await Task.sleep(for: .milliseconds(300))
+            app.island.handlePointer(true, panel: body)
+            app.island.handlePointer(false, panel: body)
+            try await Task.sleep(for: .milliseconds(450))
+            checks["deliberately opened overview keeps the configured close delay"] = app.island.state.expanded && app.island.state.overview
+            app.island.collapse()
+            app.model.settings.island.autoCloseDelay = 0
+            try await Task.sleep(for: .milliseconds(250))
+            let drawnInset = cap.screen.map { screen in
+                CameraIslandGeometry.collapsedDrawnInset(CameraIslandGeometry.layout(screen: CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
+                    safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness),
+                    expanded: false, expandedWidth: 560, expandedHeight: 140, compactExtension: 88))
+            } ?? -1
+            checks["collapsed notch paints only the camera band"] = cap.screen.map { drawnInset == ($0.safeAreaInsets.top > 0 ? CameraIslandGeometry.seamOverlap : 0) } == true
         }
         for _ in 0..<4 { app.island.showOverview(); app.island.selectModule(.calculator); app.island.collapse() }
         app.island.showOverview()

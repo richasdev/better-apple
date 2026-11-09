@@ -25,6 +25,9 @@ final class IslandManager {
     private var observations: Set<AnyCancellable> = []
     private var notificationObservers: [NSObjectProtocol] = []
     private var closeTask: Task<Void, Never>?
+    private var hoverTask: Task<Void, Never>?
+    /// True only while a hover-opened overview is the sole reason the notch is open.
+    private var revealedByHover = false
     private var contentTask: Task<Void, Never>?
     private var geometryTask: Task<Void, Never>?
     private var connectionTask: Task<Void, Never>?
@@ -84,6 +87,12 @@ final class IslandManager {
             }
         }
         observe(NSWorkspace.accessibilityDisplayOptionsDidChangeNotification) { [weak self] _ in self?.applySettings() }
+        // A close deadline that fell inside menu tracking was deferred; rearm it
+        // once the Tools/player menu is dismissed.
+        observe(NSMenu.didEndTrackingNotification) { [weak self] _ in
+            guard let self, self.state.expanded else { return }
+            self.scheduleAutoClose()
+        }
         for name in [NSText.didChangeNotification, NSText.didEndEditingNotification,
                      NSControl.textDidChangeNotification, NSControl.textDidEndEditingNotification] {
             observe(name) { [weak self] notification in
@@ -166,7 +175,9 @@ final class IslandManager {
                 trigger.isReleasedWhenClosed = false; trigger.isOpaque = false; trigger.backgroundColor = .clear
                 trigger.hasShadow = false; trigger.animationBehavior = .none; trigger.hidesOnDeactivate = false
                 trigger.level = .statusBar
-                let view = NSHostingView(rootView: CameraCapView(state: state, cameraWidth: cameraLayout(for: screen).cameraWidth,
+                let collapsed = cameraLayout(for: screen, expanded: false)
+                let view = NSHostingView(rootView: CameraCapView(state: state, cameraWidth: collapsed.cameraWidth,
+                    collapsedInset: CameraIslandGeometry.collapsedDrawnInset(collapsed),
                     hover: { [weak self, weak trigger] inside in if let trigger { self?.handlePointer(inside, panel: trigger) } },
                     expand: { [weak self] in self?.reveal() }))
                 view.sizingOptions = []
@@ -193,7 +204,7 @@ final class IslandManager {
     func showOverview() {
         guard model.settings.island.enabled else { return }
         let wasExpanded = state.expanded
-        closeTask?.cancel(); closeTask = nil
+        closeTask?.cancel(); closeTask = nil; cancelHoverOpen(); revealedByHover = false
         dismissConnectionNotice(collapseAutomatic: false)
         state.overview = true; state.focusRequest = 0
         relinquishKeyboardFocus()
@@ -203,7 +214,7 @@ final class IslandManager {
     }
     func open() {
         guard model.settings.island.enabled else { return }
-        closeTask?.cancel(); closeTask = nil
+        closeTask?.cancel(); closeTask = nil; cancelHoverOpen(); revealedByHover = false
         dismissConnectionNotice(collapseAutomatic: false)
         let switching = state.overview && state.expanded
         state.overview = false; state.expanded = true
@@ -213,7 +224,7 @@ final class IslandManager {
     func collapse() {
         connectionTask?.cancel(); connectionTask = nil
         state.connectionNotice = nil; state.connectionNoticeCompact = false
-        closeTask?.cancel(); closeTask = nil
+        closeTask?.cancel(); closeTask = nil; cancelHoverOpen(); revealedByHover = false
         state.pinned = false; state.focusRequest = 0; state.expanded = false
         relinquishKeyboardFocus()
     }
@@ -250,7 +261,7 @@ final class IslandManager {
     func selectModule(_ module: ModuleID) {
         guard model.settings.island.modules.contains(module) else { return }
         let switching = state.overview
-        state.overview = false
+        state.overview = false; revealedByHover = false
         state.selected = module; requestKeyboardFocus()
         if switching { transition(to: true) }
         onVisibilityChange?()
@@ -334,21 +345,41 @@ final class IslandManager {
         guard destinations.contains(where: { $0.panel === panel || $0.cap === panel }), !stopped else { return }
         if inside {
             hoveredPanels.insert(ObjectIdentifier(panel)); closeTask?.cancel(); closeTask = nil
-            if model.settings.island.hoverToExpand && !state.expanded {
-                state.overview = model.settings.island.overviewOnHoverEnabled
-                state.focusRequest = 0; state.expanded = true
-            }
-        } else { hoveredPanels.remove(ObjectIdentifier(panel)); scheduleAutoClose() }
+            if model.settings.island.hoverToExpand && !state.expanded && hoverTask == nil { scheduleHoverOpen() }
+        } else {
+            hoveredPanels.remove(ObjectIdentifier(panel))
+            if hoveredPanels.isEmpty { cancelHoverOpen() }
+            scheduleAutoClose()
+        }
     }
+    /// Hover intent: open only after the pointer rests on the notch, so sweeping
+    /// across the menu bar does not flash the overview. One finite task per entry.
+    private func scheduleHoverOpen() {
+        hoverTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(WorkspaceMotion.hoverIntent))
+            guard !Task.isCancelled, let self else { return }
+            self.hoverTask = nil
+            guard !self.stopped, !self.hoveredPanels.isEmpty, !self.state.expanded,
+                  self.model.settings.island.enabled, self.model.settings.island.hoverToExpand else { return }
+            self.state.overview = self.model.settings.island.overviewOnHoverEnabled
+            self.revealedByHover = self.state.overview
+            self.state.focusRequest = 0; self.state.expanded = true
+        }
+    }
+    private func cancelHoverOpen() { hoverTask?.cancel(); hoverTask = nil }
     private func scheduleAutoClose() {
         closeTask?.cancel(); closeTask = nil
-        let delay = model.settings.island.autoCloseDelay
-        guard !stopped, state.expanded, state.connectionNotice == nil, !state.pinned, hoveredPanels.isEmpty, delay > 0 else { return }
+        let configured = model.settings.island.autoCloseDelay
+        guard !stopped, state.expanded, state.connectionNotice == nil, !state.pinned, hoveredPanels.isEmpty, configured > 0 else { return }
+        // A hover peek is transient; a deliberately opened tool keeps the user's delay.
+        let delay = revealedByHover && state.overview ? min(configured, WorkspaceMotion.hoverExitGrace) : configured
         closeTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self, !self.stopped else { return }
             self.closeTask = nil
-            let editing = self.destinations.contains { entry in
+            // Menu tracking (Tools, player picker) runs the main run loop in
+            // event-tracking mode; NSMenu.didEndTracking rearms this deadline.
+            let editing = RunLoop.main.currentMode == .eventTracking || self.destinations.contains { entry in
                 ((entry.panel.firstResponder as? NSTextView)?.hasMarkedText() == true) || entry.panel.childWindows?.contains(where: \.isVisible) == true
             }
             let pointerInside = self.destinations.contains { ($0.panel.isVisible && $0.panel.isOnActiveSpace && $0.panel.frame.contains(NSEvent.mouseLocation)) || ($0.cap?.isVisible == true && $0.cap?.isOnActiveSpace == true && $0.cap?.frame.contains(NSEvent.mouseLocation) == true) }
@@ -356,10 +387,10 @@ final class IslandManager {
             self.collapse()
         }
     }
-    private func cameraLayout(for screen: NSScreen) -> IslandWindowLayout {
+    private func cameraLayout(for screen: NSScreen, expanded: Bool? = nil) -> IslandWindowLayout {
         CameraIslandGeometry.layout(screen: CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
             safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness),
-            expanded: state.expanded, expandedWidth: expandedContentWidth,
+            expanded: expanded ?? state.expanded, expandedWidth: expandedContentWidth,
             expandedHeight: expandedContentHeight, compactExtension: state.compactMusicTitle == nil ? 0 : 88)
     }
     private var expandedContentWidth: Double {
@@ -434,6 +465,7 @@ final class IslandManager {
         }
     }
     private func cancelPendingWork() {
+        cancelHoverOpen()
         closeTask?.cancel(); closeTask = nil; contentTask?.cancel(); contentTask = nil
         geometryTask?.cancel(); geometryTask = nil; generation += 1
     }

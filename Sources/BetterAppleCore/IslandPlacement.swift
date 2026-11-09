@@ -33,6 +33,15 @@ public struct IslandWindowLayout: Equatable, Sendable {
 }
 
 public enum CameraIslandGeometry {
+    /// Windows overlap by this much so animation rounding never opens a seam
+    /// between cap and body. On camera displays the collapsed cap window keeps
+    /// it as an invisible hover margin; only the notch-height band is drawn.
+    public static let seamOverlap = 4.0
+    /// Height of the drawn black band while collapsed: the camera/menu band only.
+    public static func collapsedDrawnInset(_ layout: IslandWindowLayout) -> Double {
+        guard let cap = layout.capFrame else { return 0 }
+        return max(0, cap.height - layout.topInset)
+    }
     public static func layout(screen metrics: CameraScreenMetrics, expanded: Bool,
                               expandedWidth: Double, expandedHeight: Double, compactExtension: Double = 0) -> IslandWindowLayout {
         let screen = metrics.screenFrame
@@ -62,12 +71,12 @@ public enum CameraIslandGeometry {
         let center = cameraGap?.midX ?? screen.midX
         let capX = bounded(center - capWidth / 2, screen.minX, screen.maxX - capWidth)
         let requestedHeight = expandedHeight.isFinite ? max(4, expandedHeight) : 320
-        let bodyHeight = min(max(0, screen.height - band), expanded ? requestedHeight : (hasNotch ? 4 : 0))
+        let bodyHeight = min(max(0, screen.height - band), expanded ? requestedHeight : (hasNotch ? seamOverlap : 0))
         let body = CGRect(x: capX + shoulder, y: screen.maxY - band - bodyHeight,
                           width: bodyWidth, height: bodyHeight)
         // Four points overlap the body so rounding never creates a gap between
         // the cap and the lower body while their independent windows animate.
-        let capHeight = min(screen.height, band + (expanded || hasNotch ? 4 : 0))
+        let capHeight = min(screen.height, band + (expanded || hasNotch ? seamOverlap : 0))
         let cap = CGRect(x: capX, y: screen.maxY - capHeight, width: capWidth, height: capHeight)
         let bottom = min(body.minY, cap.minY)
         let frame = CGRect(x: cap.minX, y: bottom, width: cap.width, height: screen.maxY - bottom)

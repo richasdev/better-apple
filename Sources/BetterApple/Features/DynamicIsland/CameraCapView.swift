@@ -4,11 +4,16 @@ import SwiftUI
 /// disappear while expanded so cap and body form one continuous silhouette.
 struct NotchCapShape: Shape {
     var bottomRadius: CGFloat
-    var animatableData: CGFloat {
-        get { bottomRadius }
-        set { bottomRadius = newValue }
+    /// Undrawn strip at the bottom of the window (collapsed hover margin), so the
+    /// visible black ends exactly at the camera/menu band.
+    var bottomInset: CGFloat = 0
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(bottomRadius, bottomInset) }
+        set { bottomRadius = newValue.first; bottomInset = newValue.second }
     }
-    func path(in rect: CGRect) -> Path {
+    func path(in fullRect: CGRect) -> Path {
+        var rect = fullRect
+        rect.size.height = max(0, fullRect.height - min(max(0, bottomInset), fullRect.height / 2))
         let shoulder = min(12, rect.width / 4, rect.height / 2)
         let radius = min(max(0, bottomRadius), max(0, (rect.width - shoulder * 2) / 2), max(0, rect.height - shoulder))
         let left = rect.minX + shoulder, right = rect.maxX - shoulder
@@ -30,27 +35,31 @@ struct NotchCapShape: Shape {
 struct CameraCapView: View {
     @ObservedObject var state: IslandState
     let cameraWidth: CGFloat
+    /// Collapsed-only invisible margin below the physical notch (see CameraIslandGeometry.seamOverlap).
+    let collapsedInset: CGFloat
     let hover: (Bool) -> Void
     let expand: () -> Void
 
-    init(state: IslandState, cameraWidth: CGFloat = 185,
+    init(state: IslandState, cameraWidth: CGFloat = 185, collapsedInset: CGFloat = 0,
          hover: @escaping (Bool) -> Void, expand: @escaping () -> Void) {
         self.state = state
         self.cameraWidth = cameraWidth
+        self.collapsedInset = collapsedInset
         self.hover = hover
         self.expand = expand
     }
 
     private var showsPlayback: Bool { !state.expanded && state.compactMusicTitle != nil }
+    private var inset: CGFloat { state.expanded ? 0 : collapsedInset }
 
     var body: some View {
         Button(action: expand) {
             GeometryReader { geometry in
                 ZStack {
-                    NotchCapShape(bottomRadius: state.expanded ? 0 : 10)
+                    NotchCapShape(bottomRadius: state.expanded ? 0 : 10, bottomInset: inset)
                         .fill(Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1))
                     if showsPlayback {
-                        let artworkSize = min(24, max(0, geometry.size.height - 8))
+                        let artworkSize = min(24, max(0, geometry.size.height - inset - 8))
                         HStack(spacing: 0) {
                             Group {
                                 if let artwork = state.compactArtwork {
@@ -73,10 +82,12 @@ struct CameraCapView: View {
                                 .foregroundStyle(state.compactMusicPlaying ? Color.green.opacity(0.9) : Color.white.opacity(0.65))
                                 .frame(width: 44)
                         }
+                        .padding(.bottom, inset)
                         .accessibilityHidden(true)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The hit shape keeps the full window, including the invisible margin.
                 .contentShape(NotchCapShape(bottomRadius: state.expanded ? 0 : 10))
             }
         }

@@ -20,6 +20,25 @@ final class IslandPlacementTests: XCTestCase {
         XCTAssertEqual(layout.frame, CGRect(x: 664, y: 941, width: 184, height: 41))
         assertContinuous(layout)
     }
+    func testCollapsedDrawnSilhouetteHidesInsidePhysicalNotch() {
+        let layout = CameraIslandGeometry.layout(screen: notched, expanded: false, expandedWidth: 560, expandedHeight: 140)
+        let drawn = layout.capFrame!.height - CameraIslandGeometry.collapsedDrawnInset(layout)
+        XCTAssertEqual(drawn, 37, "Only the camera band is painted; the 4 pt overlap stays an invisible hover margin")
+        let wings = CameraIslandGeometry.layout(screen: notched, expanded: false, expandedWidth: 560, expandedHeight: 140, compactExtension: 88)
+        XCTAssertEqual(wings.capFrame!.height - CameraIslandGeometry.collapsedDrawnInset(wings), 37)
+    }
+    func testCollapsedHeightWithoutCameraNeverExceedsMenuBar() {
+        // Reserved menu bar 30 pt (external display), 24 pt, and hidden menu bar (fallback thickness).
+        for (visibleTop, fallback, menu) in [(952.0, 24.0, 30.0), (958.0, 24.0, 24.0), (982.0, 22.0, 22.0)] {
+            let metrics = CameraScreenMetrics(screenFrame: screen, visibleFrame: CGRect(x: 0, y: 48, width: 1512, height: visibleTop - 48), menuBarHeight: fallback)
+            for wings in [0.0, 88.0] {
+                let layout = CameraIslandGeometry.layout(screen: metrics, expanded: false, expandedWidth: 560, expandedHeight: 140, compactExtension: wings)
+                XCTAssertLessThanOrEqual(layout.capFrame!.height, menu)
+                XCTAssertLessThanOrEqual(layout.frame.height, menu)
+                XCTAssertEqual(CameraIslandGeometry.collapsedDrawnInset(layout), 0)
+            }
+        }
+    }
     func testExpansionWidensCapWithBodyAndKeepsTopAnchorFixed() {
         let closed = CameraIslandGeometry.layout(screen: notched, expanded: false, expandedWidth: 420, expandedHeight: 320)
         let opened = CameraIslandGeometry.layout(screen: notched, expanded: true, expandedWidth: 420, expandedHeight: 320)

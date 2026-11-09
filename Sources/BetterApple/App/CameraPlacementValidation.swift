@@ -57,7 +57,7 @@ enum CameraPlacementValidation {
         let fullscreenOptIn = app.model.settings.island.showInFullScreen
         checks["screen-edge panels respect the explicit fullscreen option"] = cap.collectionBehavior.contains(.fullScreenAuxiliary) == fullscreenOptIn && body.collectionBehavior.contains(.fullScreenAuxiliary) == fullscreenOptIn
         app.island.handlePointer(true, panel: cap)
-        try await Task.sleep(for: .milliseconds(260))
+        try await Task.sleep(for: .milliseconds(420)) // hover intent dwell + window animation
         let expanded = expected(true)
         let actualExpanded = body.frame
         let actualCapExpanded = cap.frame
@@ -146,7 +146,7 @@ enum CameraPlacementValidation {
         }
         if let first = displayBodies.first {
             app.island.handlePointer(true, panel: first)
-            try await Task.sleep(for: .milliseconds(260))
+            try await Task.sleep(for: .milliseconds(420))
             checks["every-display Island shares expansion across connected screens"] = app.island.state.expanded && NSScreen.screens.allSatisfy { screen in
                 let metrics = CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
                     safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness)

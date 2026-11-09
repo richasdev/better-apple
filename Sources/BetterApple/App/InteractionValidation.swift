@@ -50,7 +50,7 @@ enum InteractionValidation {
         guard let panel = NSApp.windows.compactMap({ $0 as? IslandPanel }).first(where: \.isVisible) else { throw CocoaError(.coderInvalidValue) }
         let previousKey = NSApp.keyWindow
         app.island.handlePointer(true, panel: panel)
-        try await Task.sleep(for: .milliseconds(35))
+        try await Task.sleep(for: .milliseconds(200)) // hover intent dwell (WorkspaceMotion.hoverIntent) precedes opening
         checks["hover expansion never requests keyboard activation"] = app.island.state.expanded && app.island.state.focusRequest == 0 && !panel.isKeyboardTarget && !panel.isKeyWindow && NSApp.keyWindow === previousKey
         app.island.handlePointer(false, panel: panel)
         app.island.togglePin()

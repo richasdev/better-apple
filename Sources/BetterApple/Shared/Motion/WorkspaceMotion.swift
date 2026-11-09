@@ -6,6 +6,14 @@ enum WorkspaceMotion {
     static let standard = 0.22
     static let content = 0.18
     static let settle = 0.28
+    /// Pointer dwell before hover opens the notch. Filters menu-bar sweeps that
+    /// merely cross the camera area; a click still opens immediately. Not motion,
+    /// so Reduce Motion does not change it.
+    static let hoverIntent = 0.15
+    /// After a hover-revealed overview loses the pointer it collapses this fast,
+    /// or sooner when the user's close delay is shorter. Covers crossing the
+    /// seam between the cap and body windows.
+    static let hoverExitGrace = 0.3
 
     static func animation(reduceMotion: Bool, duration: Double = standard) -> Animation? {
         guard !reduceMotion, duration.isFinite, duration > 0 else { return nil }
