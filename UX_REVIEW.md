@@ -148,6 +148,14 @@ Native screenshot judgment: music/calendar hierarchy, divider, week/date, Contro
 
 Motion uses shared finite WorkspaceMotion timings, Reduce Motion and interruption reconciliation. Runtime tests exercise overview→editor→overview, preserved calculation/focus intent, hover and repeated reversal, per-display cap geometry, short event banners and disabled sources. System-notice smoke uses30 pure checks and never starts hardware listeners. No live AirPods/output-change/battery-discharge, external typing/hover, VoiceOver or achieved FPS claim is made. Final counts/builds are recorded in [report](Validation/2026-11-09-notch-overview.json).
 
+## First published prerelease — 0.7.1 (2026-11-09)
+
+Release scope includes the four pre-existing uncommitted Dock changes. Purpose: remove permanent plates behind app icons, keep drag-target feedback, avoid the magnification cusp at icon centres and shorten exit. Shared WorkspaceMotion tracking uses a 0.14 s response / 0.9 damping spring; release uses 0.24 s / 1 damping; panel exit is 75% of the saved entrance duration. Zero duration and system Reduce Motion disable tracking animation. Existing preferences and layouts are retained. These are implementation choices, not measured settling-time or physical smoothness guarantees.
+
+Verification: 30 core tests, all 11 native harnesses, arm64 Debug build and universal Release build passed. Dock harness covers both axes, maximum magnification/labels bounds, cancellation, hide deadlines, native note binding and IME protection. Falloff assertions cover symmetry, endpoints, monotonicity and slopes. The first Debug runtime ran concurrently with native harness apps and failed three connection-notice/calculator checks (118 checks total); a subsequent isolated runtime passed all 120 checks, including the two conditional editor checks. Interference is suspected, not proven; the failed attempt is retained in the aggregate report. No new visual or physical interaction certification is claimed for the Dock changes. No FPS, VoiceOver or live integration measurement was performed for this release.
+
+Packaging judgment: Apple Development signature with hardened runtime and timestamp verifies on both architectures, including after extracting the ZIP. Gatekeeper rejects the artifact (exit 3); Developer ID/notarization is unavailable. Publication is explicitly a test prerelease, with installation limitations in the README, release notes and RELEASE.md. Release was not launched against the user's preferences in this run. [Concrete evidence](Validation/2026-11-09-first-release.json).
+
 ## Notch hover intent and native Dock repair — 0.7.1
 
 Reference: [boring.notch](https://github.com/TheBoredTeam/boring.notch) (GPL-3.0), studied for observable behavior only (README, sizing/hover constants read as facts). No code, assets, MediaRemote, private CGS spaces or XPC helper were copied or adopted.

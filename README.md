@@ -1,8 +1,14 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.7.0**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Primeira pré-release **0.7.1**. Sem dependências externas de runtime, backend ou telemetria.
 
-Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
+Repositório: [richasdev/better-apple](https://github.com/richasdev/better-apple).
+
+## Primeira pré-release
+
+Baixe o ZIP universal (Apple Silicon e Intel) em [Releases](https://github.com/richasdev/better-apple/releases). Extraia e mova `BetterApple.app` para Applications. O ícone aparece na barra de menus.
+
+A versão 0.7.1 é destinada a testes: tem assinatura **Apple Development**, com hardened runtime e timestamp, mas **não tem assinatura Developer ID nem notarização**. A integridade da assinatura foi verificada nas duas arquiteturas; o Gatekeeper rejeita este pacote. O macOS pode bloquear sua abertura. Se confiar na origem, use o procedimento nativo em System Settings → Privacy & Security → Open Anyway, quando disponível; não é necessário desativar o Gatekeeper. Veja [RELEASE.md](RELEASE.md) para verificações e limitações.
 
 ## Compilar e executar
 
@@ -134,7 +140,7 @@ Build Debug aceita `--validate`: executa verificações internas com UserDefault
 
 [Atoll](https://github.com/Ebullioscopic/Atoll) foi consultado como referência de arquitetura e comportamento. Nenhum código, recurso gráfico ou framework desse projeto GPLv3 foi incorporado. Veja [ARCHITECTURE.md](ARCHITECTURE.md).
 
-A licença de distribuição do BetterApple ainda não foi definida; por isso não há `LICENSE` concedendo direitos de distribuição nesta etapa. Definir licença, revisar marcas para o nome público e preparar assinatura/notarização são requisitos antes de distribuir.
+A licença do BetterApple ainda não foi definida; por isso não há `LICENSE` concedendo direitos de redistribuição ou modificação. Esta primeira publicação é uma pré-release de testes. Definir licença, revisar marcas para o nome público e preparar assinatura Developer ID/notarização continuam pendentes para uma distribuição estável.
 
 Para uma sequência finita de 20 ciclos destinada ao Instruments, use o build Debug:
 

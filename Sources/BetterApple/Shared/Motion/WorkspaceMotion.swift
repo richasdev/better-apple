@@ -19,6 +19,17 @@ enum WorkspaceMotion {
         guard !reduceMotion, duration.isFinite, duration > 0 else { return nil }
         return .timingCurve(0.2, 0, 0, 1, duration: min(0.8, duration))
     }
+    /// Continuous pointer tracking (Dock magnification). A short critically
+    /// damped spring retargets from the current velocity on every pointer event,
+    /// so the icon follows the cursor (~0.1 s settle) instead of restarting a
+    /// fixed-duration ease that always lags one curve behind.
+    static func tracking(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .interactiveSpring(response: 0.14, dampingFraction: 0.9, blendDuration: 0.05)
+    }
+    /// Return to rest after tracking ends: slightly longer, no overshoot.
+    static func release(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 1)
+    }
     static func transition(reduceMotion: Bool) -> AnyTransition {
         reduceMotion ? .identity : .opacity.combined(with: .offset(y: 4))
     }

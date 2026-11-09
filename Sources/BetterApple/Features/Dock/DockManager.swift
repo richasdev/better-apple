@@ -250,8 +250,9 @@ final class DockManager: ObservableObject {
             guard destination.panel.frame != rect else { continue }
             if animated, !reduced, settings.animationDuration > 0 {
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = settings.animationDuration
-                    context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: hoveringScreens.contains(id))
+                    let expanding = hoveringScreens.contains(id)
+                    context.duration = settings.animationDuration * (expanding ? 1 : 0.75) // exit faster than entrance
+                    context.timingFunction = WorkspaceMotion.windowTimingFunction(expanding: expanding)
                     destination.panel.animator().setFrame(rect, display: true)
                 }
             } else { destination.panel.setFrame(rect, display: true) }

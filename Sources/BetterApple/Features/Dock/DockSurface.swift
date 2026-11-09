@@ -33,6 +33,7 @@ struct DockSurface: View {
         }
     }
     private var coordinateName: String { "dock-surface-" + screenID }
+    private var motionOff: Bool { reduceMotion || manager.preferences.animationDuration == 0 }
     private var revealOffset: CGSize {
         guard !expanded, !reduceMotion else { return .zero }
         switch manager.preferences.position {
@@ -128,8 +129,10 @@ struct DockSurface: View {
         .onChange(of: focusedID) { _, value in
             if value != nil { manager.hover(true, screenID: screenID) }
         }
-        .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: pointer)
-        .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: expanded)
+        // Pointer motion is direct feedback: spring tracking, not the reveal duration.
+        .animation(pointer == nil ? WorkspaceMotion.release(reduceMotion: motionOff) : WorkspaceMotion.tracking(reduceMotion: motionOff), value: pointer)
+        // Leaving is faster than arriving.
+        .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration * (expanded ? 1 : 0.75)), value: expanded)
         .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: manager.applications.map(\.id))
         .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: contentMetrics.modules)
         .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: targetedID)
@@ -157,10 +160,9 @@ struct DockSurface: View {
     }
     private func magnification(for id: String) -> CGFloat {
         guard !reduceMotion, manager.preferences.magnification > 1, let pointer, let frame = iconFrames[id] else { return 1 }
-        let distance = vertical ? abs(pointer.y - frame.midY) : abs(pointer.x - frame.midX)
-        let reach = (metrics.hitSide + manager.preferences.spacing) * 1.65
-        let influence = max(0, 1 - distance / reach)
-        return 1 + (manager.preferences.magnification - 1) * influence * influence
+        let distance = vertical ? pointer.y - frame.midY : pointer.x - frame.midX
+        let reach = (metrics.hitSide + manager.preferences.spacing) * 1.9
+        return 1 + (manager.preferences.magnification - 1) * DockMagnificationFalloff.influence(distance: distance, reach: reach)
     }
     /// Shift visible items within stable logical slots. Growing a large icon
     /// pushes its neighbors apart without changing the geometry that drives
@@ -213,19 +215,25 @@ struct DockSurface: View {
                 if active && manager.preferences.applicationPaths.contains(app.id) { targetedID = app.id }
                 else if targetedID == app.id { targetedID = nil }
             }
-            Circle().fill(app.running ? accent : .clear).frame(width: 4, height: 4).accessibilityHidden(true)
+            Circle().fill(app.running ? Color.primary.opacity(0.85) : .clear).frame(width: 4, height: 4).accessibilityHidden(true)
             if manager.preferences.showLabels {
                 Text(app.name).font(.system(size: 9, weight: .medium)).lineLimit(1).truncationMode(.tail)
                     .frame(width: metrics.itemWidth, height: 11).accessibilityHidden(true)
             }
         }
         .frame(width: metrics.itemWidth, height: metrics.itemHeight)
+        // No permanent plate: the native app icon is the tile. Drop-target
+        // feedback exists only while a drag is over this slot.
         .background {
-            if manager.preferences.presentation == .floating { DockTileBackground(preferences: manager.preferences) }
+            if targetedID == app.id {
+                RoundedRectangle(cornerRadius: 12).fill(accent.opacity(0.16))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(accent.opacity(0.7), lineWidth: 1))
+            }
         }
-        .background(RoundedRectangle(cornerRadius: 10).fill(accent.opacity(targetedID == app.id ? 0.16 : 0)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(accent.opacity(targetedID == app.id ? 0.7 : 0), lineWidth: 1))
         .offset(x: vertical ? 0 : displacement, y: vertical ? displacement : 0)
+        // Measured AFTER .offset on purpose: a background after a geometry effect
+        // reports the un-offset layout slot (verified by probe), so displacement
+        // never feeds back into the falloff it is computed from.
         .background(GeometryReader { proxy in
             Color.clear.preference(key: DockIconFrames.self, value: [app.id: proxy.frame(in: .named(coordinateName))])
         })
@@ -241,5 +249,17 @@ private struct DockIconButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
             .opacity(configuration.isPressed ? 0.78 : 1)
             .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: min(WorkspaceMotion.quick, duration)), value: configuration.isPressed)
+    }
+}
+
+/// Raised-cosine bell: 1 at the pointer, 0 at `reach`, zero slope at both ends.
+/// C1-continuous, so crossing an icon centre has no cusp (the former squared
+/// linear falloff had a slope break at distance 0).
+enum DockMagnificationFalloff {
+    static func influence(distance: CGFloat, reach: CGFloat) -> CGFloat {
+        guard reach > 0, distance.isFinite else { return 0 }
+        let d = abs(distance)
+        guard d < reach else { return 0 }
+        return 0.5 + 0.5 * cos(.pi * d / reach)
     }
 }

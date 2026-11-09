@@ -4,6 +4,22 @@ import Foundation
 @main
 struct DockSmoke {
     @MainActor static func main() throws {
+        // Magnification falloff: peak at pointer, symmetric, zero slope at the
+        // centre (no cusp) and at the reach edge, monotonic in between.
+        let reach: CGFloat = 130
+        assert(DockMagnificationFalloff.influence(distance: 0, reach: reach) == 1)
+        assert(DockMagnificationFalloff.influence(distance: reach, reach: reach) == 0)
+        assert(DockMagnificationFalloff.influence(distance: -40, reach: reach) == DockMagnificationFalloff.influence(distance: 40, reach: reach))
+        assert(DockMagnificationFalloff.influence(distance: .nan, reach: reach) == 0 && DockMagnificationFalloff.influence(distance: 5, reach: 0) == 0)
+        let h: CGFloat = 0.01
+        let centreSlope = (DockMagnificationFalloff.influence(distance: h, reach: reach) - 1) / h
+        let edgeSlope = DockMagnificationFalloff.influence(distance: reach - h, reach: reach) / h
+        assert(abs(centreSlope) < 0.001 && abs(edgeSlope) < 0.001)
+        var previous: CGFloat = 1
+        for step in stride(from: CGFloat(1), through: reach, by: 1) {
+            let value = DockMagnificationFalloff.influence(distance: step, reach: reach)
+            assert(value <= previous); previous = value
+        }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
         let oldData = Data("{\"iconSize\":40,\"applicationPaths\":[\"/System/Library/CoreServices/Finder.app\"]}".utf8)
