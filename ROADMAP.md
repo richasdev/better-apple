@@ -144,3 +144,12 @@ O helper de Computer Use do Orca retornou `permission_denied` para Accessibility
 - [x] YouTube/YouTube Music adapters for Chrome, Safari and Brave with exact hostguards and setup UI.
 - [x] Compile installed player/browser dictionaries; execute actual adapter JavaScript in isolated fixtures.
 - [ ] Verify actual authorized Spotify playback and each browser on supported macOS releases; fixtures do not prove live-site playback.
+
+## 0.7.0 — reference-shaped notch
+- [x] Horizontal music/calendar overview as the default hover presentation.
+- [x] Details/overview navigation with finite geometry transitions.
+- [x] Real artwork and playback state around the reserved camera center.
+- [x] External-display compact wings stay inside the menu band.
+- [x] Event-driven Mac low battery and default-audio-output notices.
+- [ ] Certify hardware callbacks, live playback, full-screen Spaces and physical hover on supported macOS versions.
+- [ ] AirPods private battery/noise-control and general Focus integration remain outside implemented public integrations.

@@ -1,6 +1,6 @@
 # BetterApple
 
-Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.6.1**. Sem dependências externas de runtime, backend ou telemetria.
+Aplicativo nativo de personalização e produtividade para macOS 14+, escrito do zero em Swift, SwiftUI e AppKit. Versão de desenvolvimento **0.7.0**. Sem dependências externas de runtime, backend ou telemetria.
 
 Repositório privado: [richasdev/better-apple](https://github.com/richasdev/better-apple).
 
@@ -153,3 +153,11 @@ No módulo Música, abra o menu do nome do player e escolha Apple Music, Spotify
 YouTube usa automação local do navegador, exclusivamente em hosts YouTube, e ignora abas sem vídeo. Abra um vídeo, habilite **Allow JavaScript from Apple Events** no navegador e conecte. O botão **Browser setup…** explica onde habilitar. Safari: recursos para desenvolvedores/Developer Settings. Chrome/Brave: View → Developer. O BetterApple não modifica essa preferência. Se houver vários vídeos, usa o primeiro encontrado na ordem de janelas/abas. YouTube Music também é aceito. Próxima/anterior dependem dos botões disponíveis na página; sem anterior, reinicia o vídeo. Restrições de autoplay do navegador podem manter o vídeo pausado. Alterações de DOM do site podem exigir ajuste do adaptador.
 
 A interface continua inteiramente SwiftUI/AppKit. Essa automação não adiciona WebView, extensão, backend ou acesso a tokens. Referências: [Chromium AppleScript](https://www.chromium.org/developers/applescript/) e [Safari Developer Settings](https://developer.apple.com/documentation/safari-developer-tools/developer-settings).
+
+## Notch overview — 0.7.0
+
+O notch agora abre um painel horizontal de560×140pt com música e calendário lado a lado. **Tools** abre os módulos detalhados; a seta de retorno volta ao overview sem perder cálculo ou timer. A preferência **Open horizontal overview first** permite manter a abertura direta anterior. O painel não solicita teclado ao abrir por hover; um editor detalhado solicita foco somente por ação explícita.
+
+Quando um player autorizado tem uma faixa, o notch recolhido ganha duas laterais de44pt: capa real e símbolo estático de reprodução/pausa, reservando o centro físico da câmera. Sem faixa, volta à silhueta discreta. Em monitor comum, a altura recolhida continua limitada à barra superior. A música mantém seu único polling visível de2s; o símbolo não simula amplitude de áudio.
+
+**Audio output and low battery notices** usa callbacks públicos CoreAudio/IOPS, sem polling, novas permissões ou avisos iniciais. Troca real da saída de áudio mostra o dispositivo; bateria interna avisa ao cruzar20% em descarga. Avisos curtos duram4s, sem tomar teclado. Bluetooth continua opt-in separado. Não foram implementados controle de ruído/bateria privada dos AirPods, espelho de câmera ou leitura global de Focus. A imagem enviada é referência visual, não uma garantia de APIs presentes no macOS.
