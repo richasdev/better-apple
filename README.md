@@ -56,7 +56,7 @@ A Dock do macOS pode reaparecer na borda: a opção utiliza o ocultamento suport
 
 ## Bluetooth e AirPods
 
-**Dynamic Island → Bluetooth connection notices** mostra nome, símbolo e conexão/desconexão em um aviso de quatro segundos. Passar o ponteiro não solicita teclado; clicar abre os controles normais. Um evento durante a edição mantém o conteúdo do módulo.
+Ative **Dynamic Island → Bluetooth connection notices** (desligado por padrão). A opção mostra nome, símbolo e conexão/desconexão em um aviso de quatro segundos. Passar o ponteiro não solicita teclado; clicar abre os controles normais. Um evento durante a edição mantém o conteúdo do módulo.
 
 Usa notificações públicas de conexão Bluetooth Classic, sem scan ou pareamento e sem avisos falsos para dispositivos já conectados ao iniciar. BLE-only, abertura do estojo e bateria individual dos AirPods não são cobertos por essa integração. A permissão é controlada pelo macOS. A UI e o ledger foram testados sem iniciar hardware; uma conexão física ainda precisa de verificação.
 

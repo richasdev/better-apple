@@ -74,7 +74,7 @@ struct IslandSettingsView: View {
                 Toggle("Enable Dynamic Island", isOn: $model.settings.island.enabled)
                 Toggle("Expand on hover", isOn: $model.settings.island.hoverToExpand)
                 Toggle("Bluetooth connection notices", isOn: $model.settings.island.connectionNotificationsEnabled)
-                Text("Briefly shows connected and disconnected devices, including AirPods, without scanning or pairing. macOS may request Bluetooth access. AirPods battery and BLE-only devices are not available through this passive connection API.")
+                Text("Opt in to briefly show connected and disconnected devices, including AirPods, without scanning or pairing. macOS may request Bluetooth access. AirPods battery and BLE-only devices are not available through this passive connection API.")
                     .font(.caption).foregroundStyle(.secondary)
                 if !cameraMode {
                     Toggle("Minimal appearance", isOn: $model.settings.island.minimal)

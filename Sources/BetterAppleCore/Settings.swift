@@ -50,7 +50,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         set { dynamicHeight = newValue }
     }
     public var connectionNotificationsEnabled: Bool {
-        get { connectionNotifications ?? true }
+        get { connectionNotifications ?? false }
         set { connectionNotifications = newValue }
     }
     public var placementMode: IslandPlacement {

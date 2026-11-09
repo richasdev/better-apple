@@ -24,59 +24,28 @@ struct BluetoothConnectionLedger {
 final class BluetoothConnectionService: NSObject {
     var onEvent: ((BluetoothConnectionEvent) -> Void)?
     private(set) var isRunning = false
-    private var connectionNotification: IOBluetoothUserNotification?
-    private var disconnections: [String: IOBluetoothUserNotification] = [:]
-    private var ledger = BluetoothConnectionLedger()
-    private lazy var receiver = BluetoothNotificationReceiver(owner: self)
+    private var generation = UUID()
+    private let transport = BluetoothConnectionTransport()
 
     @discardableResult func start() -> Bool {
         guard !isRunning else { return true }
-        guard let notification = IOBluetoothDevice.register(forConnectNotifications: receiver,
-            selector: #selector(BluetoothNotificationReceiver.connected(_:device:))) else { return false }
-        connectionNotification = notification
         isRunning = true
-        // Initial devices are not new connections. Register disconnect observers so
-        // existing headphones can later disconnect/reconnect with the same semantics.
-        for device in IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? [] where device.isConnected() {
-            guard let id = device.addressString, !id.isEmpty else { continue }
-            ledger.seed([id])
-            observeDisconnection(device, id: id)
+        let token = UUID()
+        generation = token
+        transport.start { [weak self] event in
+            Task { @MainActor [weak self] in
+                guard let self, self.isRunning, self.generation == token else { return }
+                self.onEvent?(event)
+            }
         }
         return true
     }
 
     func stop() {
+        guard isRunning else { return }
         isRunning = false
-        connectionNotification?.unregister()
-        connectionNotification = nil
-        disconnections.values.forEach { $0.unregister() }
-        disconnections.removeAll()
-        ledger.reset()
-    }
-
-    fileprivate func didConnect(_ device: IOBluetoothDevice, notification: IOBluetoothUserNotification) {
-        guard isRunning, notification === connectionNotification,
-              let id = device.addressString, !id.isEmpty else { return }
-        let isNew = ledger.connect(id)
-        observeDisconnection(device, id: id)
-        if isNew { onEvent?(Self.presentation(name: device.name, majorClass: device.deviceClassMajor, connected: true)) }
-    }
-
-    fileprivate func didDisconnect(_ device: IOBluetoothDevice, notification: IOBluetoothUserNotification) {
-        guard isRunning, let id = device.addressString, !id.isEmpty,
-              notification === disconnections[id] else { return }
-        disconnections.removeValue(forKey: id)?.unregister()
-        if ledger.disconnect(id) {
-            onEvent?(Self.presentation(name: device.name, majorClass: device.deviceClassMajor, connected: false))
-        }
-    }
-
-    private func observeDisconnection(_ device: IOBluetoothDevice, id: String) {
-        guard disconnections[id] == nil else { return }
-        if let notification = device.register(forDisconnectNotification: receiver,
-            selector: #selector(BluetoothNotificationReceiver.disconnected(_:device:))) {
-            disconnections[id] = notification
-        }
+        generation = UUID()
+        transport.stop()
     }
 
     nonisolated static func presentation(name: String?, majorClass: BluetoothDeviceClassMajor, connected: Bool) -> BluetoothConnectionEvent {
@@ -99,21 +68,63 @@ final class BluetoothConnectionService: NSObject {
         return BluetoothConnectionEvent(name: title, connected: connected, symbol: symbol)
     }
 
-    deinit {
-        connectionNotification?.unregister()
-        disconnections.values.forEach { $0.unregister() }
-    }
+    deinit { transport.stop() }
 }
 
-/// IOBluetooth owns its notification target until unregister. This weak bridge prevents
-/// that ownership from retaining the feature or its application coordinator indefinitely.
-private final class BluetoothNotificationReceiver: NSObject {
-    weak var owner: BluetoothConnectionService?
-    init(owner: BluetoothConnectionService) { self.owner = owner }
-    @objc func connected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
-        Task { @MainActor [weak owner] in owner?.didConnect(device, notification: notification) }
+/// Framework initialization may synchronously wait for CoreBluetooth. Keep it off
+/// the main actor, and serialize registration, callbacks and teardown. Invalidated
+/// generations cannot deliver a late event after the user disables the feature.
+private final class BluetoothConnectionTransport: NSObject, @unchecked Sendable {
+    private let queue = DispatchQueue(label: "app.betterapple.bluetooth", qos: .utility)
+    private var connection: IOBluetoothUserNotification?
+    private var disconnections: [String: IOBluetoothUserNotification] = [:]
+    private var ledger = BluetoothConnectionLedger()
+    private var callback: (@Sendable (BluetoothConnectionEvent) -> Void)?
+
+    func start(_ callback: @escaping @Sendable (BluetoothConnectionEvent) -> Void) {
+        queue.async { [self] in
+            guard connection == nil else { return }
+            self.callback = callback
+            connection = IOBluetoothDevice.register(forConnectNotifications: self,
+                selector: #selector(connected(_:device:)))
+            for device in IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? [] where device.isConnected() {
+                guard let id = device.addressString, !id.isEmpty else { continue }
+                ledger.seed([id])
+                observeDisconnection(device, id: id)
+            }
+        }
     }
-    @objc func disconnected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
-        Task { @MainActor [weak owner] in owner?.didDisconnect(device, notification: notification) }
+
+    func stop() {
+        queue.async { [self] in
+            connection?.unregister()
+            connection = nil
+            disconnections.values.forEach { $0.unregister() }
+            disconnections.removeAll()
+            ledger.reset()
+            callback = nil
+        }
+    }
+
+    @objc private func connected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
+        queue.async { [self] in
+            guard notification === connection, let id = device.addressString, !id.isEmpty else { return }
+            let isNew = ledger.connect(id)
+            observeDisconnection(device, id: id)
+            if isNew { callback?(BluetoothConnectionService.presentation(name: device.name, majorClass: device.deviceClassMajor, connected: true)) }
+        }
+    }
+
+    @objc private func disconnected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
+        queue.async { [self] in
+            guard let id = device.addressString, !id.isEmpty, notification === disconnections[id] else { return }
+            disconnections.removeValue(forKey: id)?.unregister()
+            if ledger.disconnect(id) { callback?(BluetoothConnectionService.presentation(name: device.name, majorClass: device.deviceClassMajor, connected: false)) }
+        }
+    }
+
+    private func observeDisconnection(_ device: IOBluetoothDevice, id: String) {
+        guard disconnections[id] == nil else { return }
+        disconnections[id] = device.register(forDisconnectNotification: self, selector: #selector(disconnected(_:device:)))
     }
 }

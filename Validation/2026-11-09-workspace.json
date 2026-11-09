@@ -201,5 +201,14 @@
     "No achieved FPS or whole-app CPU/RSS claim. Display maximum refresh rates are capabilities.",
     "Real AirPods connection and System Events authorization/restoration require hardware/user-session verification.",
     "Synthetic notch fits collapsed menu bar; expanded content extends below it deliberately."
-  ]
+  ],
+  "bluetoothStartupCorrection": {
+    "evidence": "Old Release sample showed main thread waiting inside IOBluetooth CoreBluetooth coordinator initialization.",
+    "change": "Opt-in default; serialized background transport and main-actor generation invalidation.",
+    "finalDebugRuntime": "passed",
+    "finalReleaseBuild": "passed",
+    "hardwareEventsVerified": false,
+    "normalReleaseLaunchFinished": true,
+    "gracefulReleaseExitConfirmed": true
+  }
 }
