@@ -35,7 +35,7 @@ struct SettingsRootView: View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
-                    Image(systemName: "circle.lefthalf.filled").font(.system(size: 28)).foregroundStyle(model.settings.island.visual.accent.color)
+                    BrandMark().frame(width: 36, height: 36)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("BetterApple").font(.headline)
                         Text("Make room for better.").font(.caption).foregroundStyle(.secondary)
@@ -118,6 +118,13 @@ struct SettingsRootView: View {
                     Label("Calendar refreshes on changes and event boundaries", systemImage: "calendar")
                     Label("Timers use deadlines and survive display sleep", systemImage: "timer")
                 }
+                Section("Display-adaptive motion") {
+                    ForEach(NSScreen.screens, id: \.self) { screen in
+                        LabeledContent(screen.localizedName, value: "Up to \(screen.maximumFramesPerSecond) Hz")
+                    }
+                    Text("SwiftUI and AppKit adapt animations to each display. A 120 Hz panel can present up to 120 frames per second; this is a display limit, not a measured FPS result. Reduce Motion remains respected.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Section("Engineering targets") {
                     Text("Target: under 100 MB RAM and near-zero idle CPU. See PERFORMANCE.md for measured results and outstanding profiling. Targets are not guarantees.").foregroundStyle(.secondary)
                     Text("Reduce Motion follows System Settings → Accessibility → Display.").font(.callout)
@@ -128,6 +135,11 @@ struct SettingsRootView: View {
                 Section("Calendar") {
                     Text("Read upcoming events using EventKit. Access is requested only when you choose to connect.").foregroundStyle(.secondary)
                     Button("Allow Calendar Access") { Task { await calendar.requestAccess() } }
+                }
+                Section("Bluetooth notices") {
+                    Toggle("Show device connection notices", isOn: $model.settings.island.connectionNotificationsEnabled)
+                    Text("Passive connection and disconnection events for Dynamic Island. No scanning, pairing or AirPods battery access. macOS controls Bluetooth permission.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Music automation") {
                     Text("macOS asks for Automation permission separately for each player. Open the player first, then connect.").foregroundStyle(.secondary)
@@ -146,7 +158,7 @@ struct SettingsRootView: View {
         case .about:
             Form {
                 Section {
-                    Image(systemName: "circle.lefthalf.filled").font(.system(size: 46)).foregroundStyle(model.settings.island.visual.accent.color)
+                    BrandMark().frame(width: 76, height: 76)
                     Text("BetterApple").font(.largeTitle.bold())
                     Text("\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development") · Native macOS workspace tools").foregroundStyle(.secondary)
                     Text("Built with SwiftUI, AppKit and public system APIs. No external runtime dependencies.")

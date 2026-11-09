@@ -30,7 +30,7 @@ enum CameraPlacementValidation {
         let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.screens.first
         guard let screen else { throw CocoaError(.coderInvalidValue) }
         let metrics = CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
-            safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea)
+            safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness)
         app.model.settings.island.placementMode = .camera
         app.model.settings.island.allDisplays = false
         app.model.settings.island.hoverToExpand = true
@@ -125,24 +125,31 @@ enum CameraPlacementValidation {
         let displayCaps = NSApp.windows.compactMap { $0 as? CameraCapPanel }.filter(\.isVisible)
         checks["every-display Island creates one body on each connected screen"] = displayBodies.count == NSScreen.screens.count && NSScreen.screens.allSatisfy { screen in
             let metrics = CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
-                safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea)
+                safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness)
             let frame = CameraIslandGeometry.layout(screen: metrics, expanded: false,
                 expandedWidth: app.model.settings.island.expandedWidth, expandedHeight: app.model.settings.island.expandedHeight).bodyFrame
             return displayBodies.contains { matches($0.frame, frame) }
         }
         checks["every display has a flush-top cap including screens without notches"] = displayCaps.count == NSScreen.screens.count && NSScreen.screens.allSatisfy { screen in
             let metrics = CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
-                safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea)
+                safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness)
             let layout = CameraIslandGeometry.layout(screen: metrics, expanded: false,
                 expandedWidth: app.model.settings.island.expandedWidth, expandedHeight: app.model.settings.island.expandedHeight)
             return layout.capFrame.map { frame in displayCaps.contains { matches($0.frame, frame) && abs($0.frame.maxY - screen.frame.maxY) < 1 } } == true
+        }
+        checks["synthetic compact notch stays within the actual top menu bar"] = NSScreen.screens.filter { $0.safeAreaInsets.top == 0 }.allSatisfy { screen in
+            let measured = screen.frame.maxY - screen.visibleFrame.maxY
+            let barHeight = measured > 0 ? measured : NSStatusBar.system.thickness
+            return displayCaps.contains { cap in
+                abs(cap.frame.maxY - screen.frame.maxY) < 1 && abs(cap.frame.height - barHeight) < 1 && cap.frame.minY >= screen.frame.maxY - barHeight - 0.5
+            }
         }
         if let first = displayBodies.first {
             app.island.handlePointer(true, panel: first)
             try await Task.sleep(for: .milliseconds(260))
             checks["every-display Island shares expansion across connected screens"] = app.island.state.expanded && NSScreen.screens.allSatisfy { screen in
                 let metrics = CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
-                    safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea)
+                    safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness)
                 let layout = CameraIslandGeometry.layout(screen: metrics, expanded: true,
                     expandedWidth: app.model.settings.island.expandedWidth, expandedHeight: app.model.settings.island.expandedHeight)
                 return displayBodies.contains { matches($0.frame, layout.bodyFrame) } && layout.capFrame.map { frame in displayCaps.contains { matches($0.frame, frame) } } == true

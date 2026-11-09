@@ -31,7 +31,7 @@ struct IslandSurface: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        let base = scheme == .dark ? Color.black : Color(nsColor: .windowBackgroundColor)
+        let base = scheme == .dark ? Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1) : Color(nsColor: .windowBackgroundColor)
         ZStack {
             if appearance.material == .glass && !reduceTransparency {
                 shape.fill(.regularMaterial)

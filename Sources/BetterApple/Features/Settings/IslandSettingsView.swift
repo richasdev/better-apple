@@ -17,7 +17,7 @@ struct IslandSettingsView: View {
                 Picker("Placement", selection: $model.settings.island.placementMode) {
                     ForEach(IslandPlacement.allCases) { Text($0.title).tag($0) }
                 }
-                Text(cameraMode ? "Aligned with the physical MacBook camera cutout. A 4 pt black edge remains below it for hover; expanded controls open underneath. On a display without a camera cutout, the same black notch shape is drawn flush with the top edge." : "A separate floating surface below the menu bar, with adjustable offsets.")
+                Text(cameraMode ? "On a MacBook, aligns with the physical camera cutout and leaves a 4 pt hover edge. On other displays, the closed notch fits entirely inside the top menu bar; hover opens the controls below it." : "A separate floating surface below the menu bar, with adjustable offsets.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Displays") {
@@ -73,6 +73,9 @@ struct IslandSettingsView: View {
             Section("Behavior") {
                 Toggle("Enable Dynamic Island", isOn: $model.settings.island.enabled)
                 Toggle("Expand on hover", isOn: $model.settings.island.hoverToExpand)
+                Toggle("Bluetooth connection notices", isOn: $model.settings.island.connectionNotificationsEnabled)
+                Text("Briefly shows connected and disconnected devices, including AirPods, without scanning or pairing. macOS may request Bluetooth access. AirPods battery and BLE-only devices are not available through this passive connection API.")
+                    .font(.caption).foregroundStyle(.secondary)
                 if !cameraMode {
                     Toggle("Minimal appearance", isOn: $model.settings.island.minimal)
                     Toggle("Live compact status", isOn: $model.settings.island.visual.compactStatus)
@@ -88,12 +91,13 @@ struct IslandSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Geometry") {
+                Toggle("Fit height to the active module", isOn: $model.settings.island.dynamicHeightEnabled)
                 if !cameraMode {
                     slider("Compact width", value: $model.settings.island.width, range: 140...500)
                     slider("Compact height", value: $model.settings.island.height, range: 24...64)
                 }
                 slider("Expanded width", value: $model.settings.island.expandedWidth, range: 340...650)
-                slider("Expanded height", value: $model.settings.island.expandedHeight, range: 240...600)
+                slider(model.settings.island.dynamicHeightEnabled ? "Maximum expanded height" : "Expanded height", value: $model.settings.island.expandedHeight, range: 240...600)
                 if !cameraMode {
                     slider("Horizontal offset", value: $model.settings.island.offsetX, range: -500...500)
                     slider("Distance below menu bar", value: $model.settings.island.offsetY, range: 0...200)

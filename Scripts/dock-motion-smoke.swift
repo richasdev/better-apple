@@ -82,6 +82,43 @@ struct DockSmoke {
         assert(!manager.hoveringScreens.contains(id))
         assert(panel.frame.width == 10)
         manager.hide()
+        manager.applyLayoutPreset(.floating)
+        manager.applyPureBlack()
+        manager.sources = DockActivitySources(music: MusicService(), system: SystemStatusService(), timer: TimerService(defaults: defaults))
+        manager.note = "Dock note before native editing"
+        manager.preferences.animationDuration = 0.12
+        manager.show()
+        manager.hover(true, screenID: id)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+        let modularPanel = NSApp.windows.first { $0 is NSPanel && $0.isVisible }!
+        if modularPanel.frame.contains(NSEvent.mouseLocation) {
+            manager.preferences.position = manager.preferences.position == .left ? .right : .left
+        }
+        assert(!modularPanel.frame.contains(NSEvent.mouseLocation))
+        func noteEditor(in view: NSView) -> NSTextView? {
+            if let editor = view as? NSTextView, !editor.isFieldEditor { return editor }
+            return view.subviews.lazy.compactMap { noteEditor(in: $0) }.first
+        }
+        guard let editor = modularPanel.contentView.flatMap({ noteEditor(in: $0) }) else { fatalError("Real Dock note tile must mount its native editor") }
+        assert(editor.string == manager.note)
+        modularPanel.makeFirstResponder(editor)
+        modularPanel.makeKeyAndOrderFront(nil)
+        editor.insertText("Edited through the native Dock note", replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.04))
+        assert(manager.note == "Edited through the native Dock note")
+        editor.setMarkedText("仮", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: (editor.string as NSString).length, length: 0))
+        assert(editor.hasMarkedText())
+        manager.hover(false, screenID: id)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+        assert(manager.hoveringScreens.contains(id))
+        editor.insertText("確", replacementRange: NSRange(location: NSNotFound, length: 0))
+        assert(!editor.hasMarkedText())
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        assert(!manager.hoveringScreens.contains(id))
+        assert(modularPanel.frame.width == 10)
+        assert(manager.note.contains("Edited through the native Dock note"))
+        manager.hide()
+        print("PASS: real modular note mounts, editor binding updates local note, active IME composition survives pointer exit, committed editing then retracts without stale key focus.")
         print("PASS: max magnification/labels panel bounds, keyboard-capable non-main panel, rapid hover cancellation and final hide deadline.")
         print("PASS: legacy Dock JSON; validation bounds; native panels; per-screen hover; all-display panel count; running apps; hide cleanup; persisted appearance; deterministic presets.")
     }

@@ -5,14 +5,17 @@
 <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
 <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleIconFile</key><string>BetterApple</string>
 <key>CFBundleName</key><string>BetterApple</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.5.0</string>
-<key>CFBundleVersion</key><string>7</string>
+<key>CFBundleShortVersionString</key><string>0.6.0</string>
+<key>CFBundleVersion</key><string>8</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSCalendarsFullAccessUsageDescription</key><string>BetterApple reads your upcoming events when you enable the Calendar module or events widget. Event data stays on your Mac.</string>
-<key>NSAppleEventsUsageDescription</key><string>BetterApple controls playback and reads song information from Apple Music or Spotify only after you choose to connect a player.</string>
+<key>NSAppleEventsUsageDescription</key><string>BetterApple controls a player only after you connect it. If you enable Replace macOS Dock, it uses System Events to hide and restore the Dock.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>BetterApple listens for Bluetooth connections to show device notices in Dynamic Island. It does not scan or pair devices.</string>
 </dict></plist>

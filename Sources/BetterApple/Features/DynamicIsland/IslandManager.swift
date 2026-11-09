@@ -27,6 +27,7 @@ final class IslandManager {
     private var closeTask: Task<Void, Never>?
     private var contentTask: Task<Void, Never>?
     private var geometryTask: Task<Void, Never>?
+    private var connectionTask: Task<Void, Never>?
     private var geometryDeadline: TimeInterval = 0
     private var generation = 0
     private var hoveredPanels = Set<ObjectIdentifier>()
@@ -46,7 +47,11 @@ final class IslandManager {
             }
         }.store(in: &observations)
         state.$selected.removeDuplicates().dropFirst().sink { [weak self] _ in
-            Task { @MainActor in self?.onVisibilityChange?() }
+            Task { @MainActor in
+                guard let self else { return }
+                if self.state.expanded { self.layout(duration: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : min(WorkspaceMotion.content, self.model.settings.island.visual.animationDuration)) }
+                self.onVisibilityChange?()
+            }
         }.store(in: &observations)
         observe(NSApplication.didChangeScreenParametersNotification) { [weak self] _ in self?.rebuild() }
         observe(NSWindow.didChangeOcclusionStateNotification) { [weak self] notification in
@@ -66,6 +71,16 @@ final class IslandManager {
             }
         }
         observe(NSWorkspace.accessibilityDisplayOptionsDidChangeNotification) { [weak self] _ in self?.applySettings() }
+        for name in [NSText.didChangeNotification, NSText.didEndEditingNotification,
+                     NSControl.textDidChangeNotification, NSControl.textDidEndEditingNotification] {
+            observe(name) { [weak self] notification in
+                guard let self, self.state.expanded, let view = notification.object as? NSView,
+                      self.destinations.contains(where: { $0.panel === view.window }) else { return }
+                // Typing resets the exit deadline; committing marked input must
+                // rearm it after the IME protection has ended.
+                self.scheduleAutoClose()
+            }
+        }
     }
     private func observe(_ name: Notification.Name, handler: @escaping @MainActor (Notification) -> Void) {
         let center = name == NSWorkspace.accessibilityDisplayOptionsDidChangeNotification ? NSWorkspace.shared.notificationCenter : NotificationCenter.default
@@ -76,7 +91,7 @@ final class IslandManager {
     private var hasVisiblePanel: Bool {
         destinations.contains { $0.panel.isVisible && $0.panel.occlusionState.contains(.visible) }
     }
-    var activeModule: ModuleID? { model.settings.island.enabled && state.expanded && hasVisiblePanel ? state.selected : nil }
+    var activeModule: ModuleID? { model.settings.island.enabled && state.expanded && !state.connectionNoticeCompact && hasVisiblePanel ? state.selected : nil }
     var compactModule: ModuleID? {
         let settings = model.settings.island
         return settings.placementMode == .floating && settings.enabled && !state.expanded && !settings.minimal && settings.visual.compactStatus && hasVisiblePanel ? state.selected : nil
@@ -141,13 +156,39 @@ final class IslandManager {
     func open() {
         guard model.settings.island.enabled else { return }
         closeTask?.cancel(); closeTask = nil
+        dismissConnectionNotice(collapseAutomatic: false)
         state.expanded = true
         requestKeyboardFocus()
     }
     func collapse() {
+        connectionTask?.cancel(); connectionTask = nil
+        state.connectionNotice = nil; state.connectionNoticeCompact = false
         closeTask?.cancel(); closeTask = nil
         state.pinned = false; state.focusRequest = 0; state.expanded = false
         relinquishKeyboardFocus()
+    }
+    func presentConnection(name: String, symbol: String, connected: Bool) {
+        guard !stopped, model.settings.island.enabled, model.settings.island.connectionNotificationsEnabled else { return }
+        connectionTask?.cancel(); closeTask?.cancel(); closeTask = nil
+        state.connectionNoticeCompact = !state.expanded || state.connectionNoticeCompact
+        state.connectionNotice = IslandConnectionNotice(name: String(name.prefix(120)), symbol: symbol, connected: connected)
+        if !state.expanded { state.focusRequest = 0; state.expanded = true }
+        else if state.connectionNoticeCompact { transition(to: true) }
+        else { layout(duration: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : min(WorkspaceMotion.content, model.settings.island.visual.animationDuration)) }
+        connectionTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled, let self else { return }
+            self.dismissConnectionNotice(collapseAutomatic: true)
+        }
+    }
+    private func dismissConnectionNotice(collapseAutomatic: Bool) {
+        guard state.connectionNotice != nil else { return }
+        connectionTask?.cancel(); connectionTask = nil
+        let compact = state.connectionNoticeCompact
+        state.connectionNotice = nil; state.connectionNoticeCompact = false
+        if compact && collapseAutomatic && !state.pinned && hoveredPanels.isEmpty { collapse() }
+        else if compact { transition(to: state.expanded) }
+        else if state.expanded { layout(duration: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : min(WorkspaceMotion.content, model.settings.island.visual.animationDuration)) }
     }
     func togglePin() {
         closeTask?.cancel(); closeTask = nil
@@ -190,7 +231,10 @@ final class IslandManager {
         let settings = model.settings.island
         guard settings.enabled, !destinations.isEmpty, configuredAllDisplays == settings.allDisplays, configuredPlacement == settings.placementMode else { rebuild(); return }
         updateSelection()
+        if !settings.connectionNotificationsEnabled { dismissConnectionNotice(collapseAutomatic: true) }
         for (panel, _, _) in destinations {
+            let theme = settings.placementMode == .camera ? SurfaceTheme.dark : settings.visual.theme
+            panel.appearance = theme == .system ? nil : NSAppearance(named: theme == .dark ? .darkAqua : .aqua)
             panel.hasShadow = settings.visual.shadowVisible && (state.expanded || settings.placementMode == .floating); panel.acceptsKeyboardFocus = state.expanded
             var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary]
             if settings.showInFullScreen { behavior.insert(.fullScreenAuxiliary) }
@@ -237,13 +281,13 @@ final class IslandManager {
     private func scheduleAutoClose() {
         closeTask?.cancel(); closeTask = nil
         let delay = model.settings.island.autoCloseDelay
-        guard !stopped, state.expanded, !state.pinned, hoveredPanels.isEmpty, delay > 0 else { return }
+        guard !stopped, state.expanded, state.connectionNotice == nil, !state.pinned, hoveredPanels.isEmpty, delay > 0 else { return }
         closeTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self, !self.stopped else { return }
             self.closeTask = nil
             let editing = self.destinations.contains { entry in
-                (entry.panel.isKeyWindow && (entry.panel.firstResponder as? NSTextView)?.isFieldEditor == true) || entry.panel.childWindows?.contains(where: \.isVisible) == true
+                ((entry.panel.firstResponder as? NSTextView)?.hasMarkedText() == true) || entry.panel.childWindows?.contains(where: \.isVisible) == true
             }
             let pointerInside = self.destinations.contains { ($0.panel.isVisible && $0.panel.isOnActiveSpace && $0.panel.frame.contains(NSEvent.mouseLocation)) || ($0.cap?.isVisible == true && $0.cap?.isOnActiveSpace == true && $0.cap?.frame.contains(NSEvent.mouseLocation) == true) }
             guard self.hoveredPanels.isEmpty, !pointerInside, !editing, !self.state.pinned, self.model.settings.island.autoCloseDelay > 0 else { return }
@@ -252,16 +296,31 @@ final class IslandManager {
     }
     private func cameraLayout(for screen: NSScreen) -> IslandWindowLayout {
         CameraIslandGeometry.layout(screen: CameraScreenMetrics(screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
-            safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea),
-            expanded: state.expanded, expandedWidth: model.settings.island.expandedWidth, expandedHeight: model.settings.island.expandedHeight)
+            safeAreaTop: screen.safeAreaInsets.top, auxiliaryLeft: screen.auxiliaryTopLeftArea, auxiliaryRight: screen.auxiliaryTopRightArea, menuBarHeight: NSStatusBar.system.thickness),
+            expanded: state.expanded, expandedWidth: state.connectionNoticeCompact ? 360 : model.settings.island.expandedWidth,
+            expandedHeight: expandedContentHeight)
+    }
+    private var expandedContentHeight: Double {
+        if state.connectionNoticeCompact { return 92 }
+        let settings = model.settings.island
+        guard settings.dynamicHeightEnabled else { return settings.expandedHeight }
+        let preferred: Double
+        switch state.selected {
+        case .calculator: preferred = 225
+        case .music: preferred = 300
+        case .calendar: preferred = 330
+        case .timer: preferred = 290
+        case .system: preferred = settings.expandedHeight
+        }
+        return min(settings.expandedHeight, preferred + (state.connectionNotice == nil ? 0 : 70))
     }
     private func layout(duration: Double) {
         let settings = model.settings.island
         for (panel, screen, cap) in destinations {
             let available = screen.visibleFrame
             let top = max(available.minY, min(available.maxY, screen.frame.maxY - screen.safeAreaInsets.top) - 4)
-            let size = NSSize(width: min(available.width, state.expanded ? settings.expandedWidth : settings.width),
-                              height: min(max(0, top - available.minY), state.expanded ? settings.expandedHeight : (settings.minimal ? 12 : settings.height)))
+            let size = NSSize(width: min(available.width, state.expanded ? (state.connectionNoticeCompact ? 360 : settings.expandedWidth) : settings.width),
+                              height: min(max(0, top - available.minY), state.expanded ? expandedContentHeight : (settings.minimal ? 12 : settings.height)))
             let rect: NSRect
             var capRect: NSRect?
             if settings.placementMode == .camera {
@@ -312,6 +371,7 @@ final class IslandManager {
         geometryTask?.cancel(); geometryTask = nil; generation += 1
     }
     func stop() {
+        connectionTask?.cancel(); connectionTask = nil
         stopped = true; cancelPendingWork(); relinquishKeyboardFocus()
         destinations.forEach { $0.cap?.orderOut(nil); $0.cap?.contentView = nil; $0.cap?.close(); $0.panel.orderOut(nil); $0.panel.contentView = nil; $0.panel.close() }; destinations.removeAll()
         for observer in notificationObservers {

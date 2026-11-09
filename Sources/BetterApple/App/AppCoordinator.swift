@@ -9,6 +9,8 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     let calendar = CalendarService()
     let music = MusicService()
     let system = SystemStatusService()
+    let bluetooth = BluetoothConnectionService()
+    let nativeDock: NativeDockService
     let timer: TimerService
     let calculator: CalculatorService
     let dock: DockManager
@@ -16,6 +18,8 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     let notices = SurfaceNoticeManager()
     let registry = IslandModuleRegistry()
     private let defaults: UserDefaults
+    private let bluetoothMonitoringAllowed: Bool
+    private let nativeDockChangesAllowed: Bool
     lazy var widgets = WidgetManager(calendar: calendar, music: music, system: system, timer: timer, calculator: calculator, defaults: defaults)
     lazy var island = IslandManager(model: model, registry: registry, sources: IslandActivitySources(timer: timer, music: music, system: system, calendar: calendar, calculator: calculator))
     private var statusItem: NSStatusItem?
@@ -25,9 +29,13 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     @Published var lastSettingsSection = "General"
     private var sleeping = false
     private var applyingPreferences = false
+    private var appearanceObservation: NSKeyValueObservation?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, bluetoothMonitoringAllowed: Bool = true, nativeDockChangesAllowed: Bool = true) {
         self.defaults = defaults
+        self.bluetoothMonitoringAllowed = bluetoothMonitoringAllowed
+        self.nativeDockChangesAllowed = nativeDockChangesAllowed
+        nativeDock = NativeDockService(defaults: defaults)
         model = AppModel(defaults: defaults)
         timer = TimerService(defaults: defaults)
         calculator = CalculatorService(defaults: defaults)
@@ -37,7 +45,28 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     }
 
     func start() {
+        if !defaults.bool(forKey: "dock.pointerReturn.v1") {
+            dock.preferences.autoHide = true
+            defaults.set(true, forKey: "dock.pointerReturn.v1")
+        }
+        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.initial, .new]) { _, _ in
+            Task { @MainActor in
+                let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                if let image = BrandAsset.image(darkMode: dark) { NSApp.applicationIconImage = image }
+            }
+        }
         model.enableCameraExperienceIfNeeded(defaults: defaults)
+        dock.sources = DockActivitySources(music: music, system: system, timer: timer)
+        dock.nativeDock = nativeDock
+        nativeDock.onActivate = { [weak self] in
+            self?.dock.preferences.enabled = true
+            self?.dock.preferences.allDisplays = true
+        }
+        if nativeDockChangesAllowed { Task { await nativeDock.activateIfRequested() } }
+        dock.onVisibilityChange = { [weak self] in self?.updateServiceDemand() }
+        bluetooth.onEvent = { [weak self] event in
+            self?.island.presentConnection(name: event.name, symbol: event.symbol, connected: event.connected)
+        }
         shortcuts.onTrigger = { [weak self] in self?.island.toggle() }
         registry.register(NativeIslandModule(id: .calculator) { [calculator] in AnyView(CalculatorModuleView(calculator: calculator)) })
         registry.register(NativeIslandModule(id: .calendar) { [calendar] in AnyView(CalendarModuleView(calendar: calendar)) })
@@ -52,6 +81,11 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         dock.$preferences.dropFirst().sink { [weak self] _ in
             guard let self, !self.applyingPreferences, self.model.settings.appearance != .custom else { return }
             self.model.settings.appearance = .custom
+        }.store(in: &subscriptions)
+        dock.$preferences.map(\.enabled).removeDuplicates().dropFirst().sink { [weak self] enabled in
+            guard let self, !enabled, self.nativeDockChangesAllowed,
+                  self.nativeDock.desiredEnabled || self.nativeDock.isActive || self.nativeDock.isBusy else { return }
+            Task { try? await self.nativeDock.setEnabled(false) }
         }.store(in: &subscriptions)
         dock.$errorMessage.removeDuplicates().compactMap { $0 }.sink { [weak self] message in
             self?.notices.show(message, openSettings: { [weak self] in self?.showDockSettings() })
@@ -128,14 +162,20 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         window.contentView = nil; settingsWindow = nil
     }
     private func updateServiceDemand() {
+        if bluetoothMonitoringAllowed && !sleeping && model.settings.island.enabled && model.settings.island.connectionNotificationsEnabled {
+            bluetooth.start()
+        } else { bluetooth.stop() }
         let active = sleeping ? nil : (island.activeModule ?? island.compactModule)
         let kinds = sleeping ? Set<DesktopWidgetKind>() : widgets.activeKinds
+        let dockModules = sleeping ? Set<DockModule>() : dock.activeModules
         if active == .calendar || kinds.contains(.events) { calendar.start() } else { calendar.stop() }
-        if active == .music || kinds.contains(.music) { music.start() } else { music.stop() }
-        if active == .system || kinds.contains(.system) || kinds.contains(.battery) { system.start() } else { system.stop() }
-        timer.setVisible(active == .timer || kinds.contains(.timer))
+        if active == .music || kinds.contains(.music) || dockModules.contains(.music) { music.start() } else { music.stop() }
+        if active == .system || kinds.contains(.system) || kinds.contains(.battery) || dockModules.contains(.battery) { system.start() } else { system.stop() }
+        timer.setVisible(active == .timer || kinds.contains(.timer) || dockModules.contains(.timer))
     }
     func stop() {
+        appearanceObservation = nil
+        bluetooth.stop()
         notices.dismiss(animated: false)
         shortcuts.stop()
         widgets.flushPersistence()
@@ -143,6 +183,13 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         subscriptions.removeAll()
         observers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }; observers.removeAll()
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+    }
+    func prepareForTermination() async -> Bool {
+        guard nativeDockChangesAllowed else { return true }
+        return await nativeDock.restoreForTermination()
+    }
+    var needsNativeDockRestoration: Bool {
+        nativeDockChangesAllowed && (nativeDock.isActive || nativeDock.hasPendingRestoration || nativeDock.isBusy)
     }
 
     private struct SuiteConfiguration: Codable {
@@ -155,6 +202,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         var timer: TimerPreferences?
         var calculator: CalculatorConfiguration?
         var widgetsEnabled: Bool?
+        var dockNote: String?
     }
     private struct ShortcutConfiguration: Codable {
         var enabled: Bool
@@ -173,9 +221,10 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     }
     func configurationData() throws -> Data {
         guard widgets.widgets.allSatisfy({ $0.note.count <= 100000 }) else { throw SettingsError.tooLarge }
+        guard dock.note.count <= 100000 else { throw SettingsError.tooLarge }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let shortcut = ShortcutConfiguration(enabled: shortcuts.enabled, key: shortcuts.key.rawValue, modifiers: shortcuts.modifiers.rawValue)
-        let data = try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut, widgetLayout: widgets.layoutPreferences, timer: timer.preferences, calculator: CalculatorConfiguration(historyEnabled: calculator.historyEnabled), widgetsEnabled: widgets.enabled))
+        let data = try encoder.encode(SuiteConfiguration(app: model.settings, dock: dock.preferences, widgets: widgets.widgets, shortcut: shortcut, widgetLayout: widgets.layoutPreferences, timer: timer.preferences, calculator: CalculatorConfiguration(historyEnabled: calculator.historyEnabled), widgetsEnabled: widgets.enabled, dockNote: dock.note))
         guard data.count <= 2 * 1024 * 1024 else { throw SettingsError.tooLarge }
         return data
     }
@@ -200,6 +249,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
             throw CocoaError(.coderInvalidValue)
         }
         let dockPreferences = try suite.dock.validated()
+        if let note = suite.dockNote, note.count > 100000 { throw SettingsError.tooLarge }
         let widgetConfigurations = try suite.widgets.map { try $0.validated() }
         let layout = try suite.widgetLayout?.validated()
         if let preferences = suite.timer {
@@ -209,6 +259,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         applyingPreferences = true
         defer { applyingPreferences = false }
         model.replaceSettings(settings); dock.preferences = dockPreferences
+        if let note = suite.dockNote { dock.note = note }
         // Disable before replacing layouts so importing an off configuration cannot flash widgets.
         if suite.widgetsEnabled == false { widgets.enabled = false }
         widgets.widgets = widgetConfigurations

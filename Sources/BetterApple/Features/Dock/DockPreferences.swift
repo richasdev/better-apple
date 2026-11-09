@@ -61,6 +61,9 @@ struct DockLayoutMetrics {
 
 struct DockPreferences: Codable, Equatable {
     var enabled = false
+    var presentation: DockPresentation = .rail
+    var enabledModules: [DockModule] = [.apps]
+    var moduleOrder: [DockModule] = DockModule.allCases
     var iconSize: Double = 48
     var spacing: Double = 10
     var opacity: Double = 0.9
@@ -80,12 +83,16 @@ struct DockPreferences: Codable, Equatable {
 
     init() {}
     private enum CodingKeys: String, CodingKey {
+        case presentation, enabledModules, moduleOrder
         case enabled, iconSize, spacing, opacity, position, autoHide, screenID, applicationPaths
         case theme, material, accent, cornerRadius, magnification, animationDuration, showLabels, showRunningApplications, allDisplays
     }
     init(from decoder: Decoder) throws {
         self.init()
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        presentation = try values.decodeIfPresent(DockPresentation.self, forKey: .presentation) ?? presentation
+        enabledModules = try values.decodeIfPresent([DockModule].self, forKey: .enabledModules) ?? enabledModules
+        moduleOrder = try values.decodeIfPresent([DockModule].self, forKey: .moduleOrder) ?? moduleOrder
         enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled) ?? enabled
         iconSize = try values.decodeIfPresent(Double.self, forKey: .iconSize) ?? iconSize
         spacing = try values.decodeIfPresent(Double.self, forKey: .spacing) ?? spacing
@@ -113,6 +120,10 @@ struct DockPreferences: Codable, Equatable {
         result.iconSize = min(80, max(24, iconSize)); result.spacing = min(24, max(0, spacing))
         result.opacity = min(1, max(0.2, opacity)); result.cornerRadius = min(40, max(0, cornerRadius))
         result.magnification = min(1.5, max(1, magnification)); result.animationDuration = min(0.5, max(0, animationDuration))
+        var seenModules = Set<DockModule>()
+        result.enabledModules = enabledModules.filter { seenModules.insert($0).inserted }
+        seenModules.removeAll()
+        result.moduleOrder = (moduleOrder + DockModule.allCases).filter { seenModules.insert($0).inserted }
         var seen = Set<String>()
         result.applicationPaths = applicationPaths.filter { seen.insert($0).inserted }
         return result

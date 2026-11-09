@@ -25,6 +25,7 @@ struct IslandView: View {
     let keyboardActive: () -> Bool
     @Namespace private var selectionAnimation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var inheritedScheme
     private var cameraMode: Bool { model.settings.island.placementMode == .camera }
     private var appearance: IslandAppearance {
         var visual = model.settings.island.visual
@@ -38,7 +39,19 @@ struct IslandView: View {
     var body: some View {
         ZStack(alignment: .top) {
             if state.expanded || state.expandedContentVisible {
+                if state.connectionNoticeCompact, let notice = state.connectionNotice {
+                    IslandConnectionBanner(notice: notice)
+                        .padding(18)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .opacity(state.expandedContentVisible ? 1 : 0)
+                        .contentShape(Rectangle()).onTapGesture(perform: open)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Open Dynamic Island tools")
+                } else {
                 VStack(spacing: 0) {
+                if let notice = state.connectionNotice {
+                    IslandConnectionBanner(notice: notice).padding(.bottom, 12)
+                }
                 HStack {
                     Label(state.selected.title, systemImage: "circle.lefthalf.filled").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
@@ -82,6 +95,8 @@ struct IslandView: View {
                 .offset(y: state.expandedContentVisible || motionDisabled ? 0 : 4)
                 .allowsHitTesting(state.expandedContentVisible)
                 .accessibilityHidden(!state.expandedContentVisible)
+                .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: min(WorkspaceMotion.content, appearance.animationDuration)), value: state.connectionNotice?.id)
+                }
             }
             if state.compactContentVisible {
                 Button(action: open) {
@@ -112,7 +127,7 @@ struct IslandView: View {
             if cameraMode {
                 if state.expanded || state.expandedContentVisible {
                     UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: radius,
-                        bottomTrailingRadius: radius, topTrailingRadius: 0).fill(.black)
+                        bottomTrailingRadius: radius, topTrailingRadius: 0).fill(Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1))
                 }
             } else {
                 IslandSurface(appearance: appearance, radius: radius)
@@ -124,6 +139,8 @@ struct IslandView: View {
         .accentColor(appearance.accent.color)
         .environment(\.workspaceMotionDisabled, motionDisabled)
         .preferredColorScheme(appearance.theme.colorScheme)
+        .environment(\.colorScheme, appearance.theme.colorScheme ?? inheritedScheme)
+        .foregroundStyle(.primary)
         .onHover(perform: hover)
         .onExitCommand(perform: close)
     }
@@ -177,5 +194,22 @@ private struct IslandOutline: Shape {
                 bottomTrailingRadius: radius, topTrailingRadius: 0).path(in: rect)
         }
         return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect)
+    }
+}
+
+private struct IslandConnectionBanner: View {
+    let notice: IslandConnectionNotice
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: notice.symbol).font(.system(size: 34, weight: .medium))
+                .foregroundStyle(.white).frame(width: 50).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notice.name).font(.system(size: 17, weight: .semibold)).lineLimit(1).foregroundStyle(.white)
+                Label(notice.connected ? "Connected" : "Disconnected", systemImage: notice.connected ? "checkmark.circle.fill" : "xmark.circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(notice.connected ? Color.green : Color.white.opacity(0.7))
+            }
+            Spacer(minLength: 0)
+        }.accessibilityElement(children: .combine)
     }
 }

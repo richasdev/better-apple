@@ -34,7 +34,7 @@ struct CameraCapView: View {
     var body: some View {
         Button(action: expand) {
             NotchCapShape(bottomRadius: state.expanded ? 0 : 10)
-                .fill(.black)
+                .fill(Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(NotchCapShape(bottomRadius: state.expanded ? 0 : 10))
         }

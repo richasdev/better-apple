@@ -21,6 +21,17 @@ struct DockSurface: View {
     private var accent: Color { manager.preferences.accent.color }
     private var expanded: Bool { !manager.preferences.autoHide || manager.hoveringScreens.contains(screenID) }
     private var metrics: DockLayoutMetrics { DockLayoutMetrics(manager.preferences, reduceMotion: reduceMotion) }
+    private var contentMetrics: DockContentMetrics {
+        DockContentMetrics(manager.preferences, applicationCount: manager.applications.count, reduceMotion: reduceMotion)
+    }
+    @Environment(\.colorScheme) private var colorScheme
+    private var effectiveScheme: ColorScheme {
+        switch manager.preferences.theme {
+        case .system: return colorScheme
+        case .dark: return .dark
+        case .light: return .light
+        }
+    }
     private var coordinateName: String { "dock-surface-" + screenID }
     private var revealOffset: CGSize {
         guard !expanded, !reduceMotion else { return .zero }
@@ -31,7 +42,6 @@ struct DockSurface: View {
         }
     }
     var body: some View {
-        let offsets = displacements
         ZStack {
             Button { manager.hover(true, screenID: screenID) } label: {
                 Capsule().fill(reduceTransparency ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.ultraThinMaterial))
@@ -46,21 +56,43 @@ struct DockSurface: View {
             ScrollView(vertical ? .vertical : .horizontal, showsIndicators: false) {
                 let layout = vertical ? AnyLayout(VStackLayout(spacing: manager.preferences.spacing)) : AnyLayout(HStackLayout(spacing: manager.preferences.spacing))
                 layout {
-                    ForEach(manager.applications) { app in icon(app, displacement: offsets[app.id] ?? 0) }
-                    if manager.applications.isEmpty {
-                        Button { manager.chooseApplications() } label: {
-                            Image(systemName: "plus.app").font(.title)
-                                .frame(width: metrics.hitSide, height: metrics.hitSide)
-                        }.buttonStyle(.plain).help("Add applications").accessibilityLabel("Add applications to Dock")
+                    ForEach(contentMetrics.modules) { module in
+                        if module == .apps {
+                            appGroup
+                        } else {
+                            Group {
+                                if expanded { DockModuleView(module: module, manager: manager) }
+                                else { Color.clear.frame(width: module.tileWidth, height: DockModule.tileHeight) }
+                            }
+                            .background {
+                                if manager.preferences.presentation == .floating {
+                                    DockTileBackground(preferences: manager.preferences)
+                                } else {
+                                    RoundedRectangle(cornerRadius: min(16, manager.preferences.cornerRadius))
+                                        .fill(manager.preferences.theme == .dark && manager.preferences.material == .solid && manager.preferences.opacity == 1 ? Color.black : Color.primary.opacity(0.035))
+                                }
+                            }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel(module.title)
+                        }
+                    }
+                    if contentMetrics.modules.isEmpty {
+                        Button("Add applications…") { manager.chooseApplications() }
+                            .frame(width: 160, height: contentMetrics.crossContent)
+                            .buttonStyle(.borderless)
                     }
                 }
                 .padding(.horizontal, metrics.horizontalPadding(vertical: vertical))
                 .padding(.top, metrics.topPadding(vertical: vertical))
                 .padding(.bottom, metrics.bottomPadding(vertical: vertical))
             }
-            .background { background }
-            .clipShape(RoundedRectangle(cornerRadius: manager.preferences.cornerRadius))
-            .overlay(RoundedRectangle(cornerRadius: manager.preferences.cornerRadius).stroke(accent.opacity(0.23)))
+            .scrollContentBackground(.hidden)
+            .background {
+                if manager.preferences.presentation == .rail {
+                    background.clipShape(RoundedRectangle(cornerRadius: manager.preferences.cornerRadius))
+                        .overlay(RoundedRectangle(cornerRadius: manager.preferences.cornerRadius).stroke(accent.opacity(0.23)))
+                }
+            }
             .opacity(expanded ? 1 : 0)
             .offset(revealOffset)
             .allowsHitTesting(expanded)
@@ -70,7 +102,8 @@ struct DockSurface: View {
         .clipped()
         .coordinateSpace(name: coordinateName)
         .contentShape(Rectangle())
-        .preferredColorScheme(manager.preferences.theme.colorScheme)
+        .environment(\.colorScheme, effectiveScheme)
+        .foregroundStyle(effectiveScheme == .dark ? Color.white : Color.black)
         .tint(accent)
         .accentColor(accent)
         .onPreferenceChange(DockIconFrames.self) { iconFrames = $0 }
@@ -88,7 +121,7 @@ struct DockSurface: View {
             if !inside { pointer = nil }
             manager.hover(inside, screenID: screenID)
         }
-        .onChange(of: expanded) { _, visible in if !visible { pointer = nil; targetedID = nil } }
+        .onChange(of: expanded) { _, visible in if !visible { pointer = nil; targetedID = nil; focusedID = nil } }
         .onChange(of: manager.applications.map(\.id)) { _, ids in
             if let targetedID, !ids.contains(targetedID) { self.targetedID = nil }
         }
@@ -98,13 +131,28 @@ struct DockSurface: View {
         .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: pointer)
         .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: expanded)
         .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: manager.applications.map(\.id))
+        .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: manager.preferences.animationDuration), value: contentMetrics.modules)
         .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: WorkspaceMotion.quick), value: targetedID)
+    }
+    private var appGroup: some View {
+        let offsets = displacements
+        let layout = vertical ? AnyLayout(VStackLayout(spacing: manager.preferences.spacing)) : AnyLayout(HStackLayout(spacing: manager.preferences.spacing))
+        return layout {
+            ForEach(manager.applications) { app in icon(app, displacement: offsets[app.id] ?? 0) }
+            if manager.applications.isEmpty {
+                Button { manager.chooseApplications() } label: {
+                    Image(systemName: "plus.app").font(.title).frame(width: metrics.itemWidth, height: metrics.itemHeight)
+                }.buttonStyle(.plain).accessibilityLabel("Add applications to Dock")
+            }
+        }
+        .frame(width: vertical ? contentMetrics.crossContent : nil, height: vertical ? nil : contentMetrics.crossContent)
+        .padding(vertical ? .vertical : .horizontal, contentMetrics.appPadding)
     }
     @ViewBuilder private var background: some View {
         if manager.preferences.material == .glass && !reduceTransparency {
             Rectangle().fill(.ultraThinMaterial).opacity(manager.preferences.opacity)
         } else {
-            Rectangle().fill(Color(nsColor: .windowBackgroundColor)).opacity(reduceTransparency ? 1 : manager.preferences.opacity)
+            Rectangle().fill(effectiveScheme == .dark ? Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1) : Color(nsColor: .windowBackgroundColor)).opacity(reduceTransparency ? 1 : manager.preferences.opacity)
         }
     }
     private func magnification(for id: String) -> CGFloat {
@@ -172,6 +220,9 @@ struct DockSurface: View {
             }
         }
         .frame(width: metrics.itemWidth, height: metrics.itemHeight)
+        .background {
+            if manager.preferences.presentation == .floating { DockTileBackground(preferences: manager.preferences) }
+        }
         .background(RoundedRectangle(cornerRadius: 10).fill(accent.opacity(targetedID == app.id ? 0.16 : 0)))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(accent.opacity(targetedID == app.id ? 0.7 : 0), lineWidth: 1))
         .offset(x: vertical ? 0 : displacement, y: vertical ? displacement : 0)
@@ -190,70 +241,5 @@ private struct DockIconButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
             .opacity(configuration.isPressed ? 0.78 : 1)
             .animation(WorkspaceMotion.animation(reduceMotion: reduceMotion, duration: min(WorkspaceMotion.quick, duration)), value: configuration.isPressed)
-    }
-}
-
-struct DockSettingsView: View {
-    @ObservedObject var manager: DockManager
-    var body: some View {
-        Form {
-            Section("BetterApple Dock") {
-                Toggle("Enable BetterApple Dock", isOn: $manager.preferences.enabled)
-                Text("This is an independent Dock alongside the macOS Dock. You can customize it while it is turned off; your setup is kept.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Placement") {
-                Picker("Position", selection: $manager.preferences.position) { ForEach(DockPosition.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                Toggle("Show on every display", isOn: $manager.preferences.allDisplays)
-                if !manager.preferences.allDisplays {
-                    Picker("Display", selection: $manager.preferences.screenID) {
-                        Text("Main display").tag("")
-                        ForEach(NSScreen.screens, id: \.self) { screen in Text(screen.localizedName).tag(DockManager.screenID(screen)) }
-                    }
-                }
-                if manager.preferences.allDisplays {
-                    Text("Every display uses the same position, appearance and pinned applications.").font(.caption).foregroundStyle(.secondary)
-                }
-                Button("Open macOS Dock settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!) }
-            }
-            Section("Behavior") {
-                Toggle("Automatically hide", isOn: $manager.preferences.autoHide)
-                Text("Move the pointer to the thin edge strip to reveal the Dock. It stays open while you interact with it.").font(.caption).foregroundStyle(.secondary)
-                Toggle("Show running applications", isOn: $manager.preferences.showRunningApplications)
-                Text("Running apps appear after pinned apps. Use their context menu to keep them in the Dock.").font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Appearance") {
-                Picker("Theme", selection: $manager.preferences.theme) { ForEach(DockTheme.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                Picker("Surface", selection: $manager.preferences.material) { ForEach(DockMaterial.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                Picker("Accent color", selection: $manager.preferences.accent) { ForEach(DockAccent.allCases) { Text($0.rawValue.capitalized).tag($0) } }
-                slider("Icon size", value: $manager.preferences.iconSize, range: 24...80, step: 2)
-                slider("Spacing", value: $manager.preferences.spacing, range: 0...24, step: 1)
-                slider("Opacity", value: $manager.preferences.opacity, range: 0.2...1, step: 0.05, unit: "%")
-                slider("Corner radius", value: $manager.preferences.cornerRadius, range: 0...40, step: 1)
-                Toggle("Show app labels", isOn: $manager.preferences.showLabels)
-            }
-            Section("Motion") {
-                slider("Magnification", value: $manager.preferences.magnification, range: 1...1.5, step: 0.02, unit: "×")
-                slider("Animation duration", value: $manager.preferences.animationDuration, range: 0...0.5, step: 0.02, unit: "s")
-                Text("Set magnification to 1× to disable it. Reduce Motion disables magnification and animated window resizing.").font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Pinned applications") {
-                ForEach(manager.applications.filter { manager.preferences.applicationPaths.contains($0.id) }) { app in
-                    HStack { Image(nsImage: app.icon).resizable().frame(width: 24, height: 24); Text(app.name); Spacer(); Button("Remove") { manager.remove(id: app.id) } }
-                }
-                Button("Add applications…") { manager.chooseApplications() }
-                Text("When the BetterApple Dock is on, drag a pinned icon onto another to reorder. Missing applications are not shown in this list.").font(.caption).foregroundStyle(.secondary)
-                if let error = manager.errorMessage { Text(error).font(.caption).foregroundStyle(.orange) }
-            }
-        }.formStyle(.grouped).onAppear { manager.prepareSettings() }
-    }
-    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, unit: String = "pt") -> some View {
-        let displayValue = unit == "%" ? value.wrappedValue.formatted(.percent.precision(.fractionLength(0))) : value.wrappedValue.formatted(.number.precision(.fractionLength(0...2))) + " " + unit
-        return LabeledContent(title) {
-            HStack {
-                Text(displayValue).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 62, alignment: .trailing)
-                Slider(value: value, in: range, step: step).frame(width: 150).accessibilityLabel(title).accessibilityValue(displayValue)
-            }
-        }
     }
 }

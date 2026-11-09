@@ -20,6 +20,11 @@ for source in sources:
     ref = obj(str(path), f'isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {q(path)}; sourceTree = SOURCE_ROOT;')
     refs.append(ref)
     builds.append(obj('build:' + str(path), f'isa = PBXBuildFile; fileRef = {ref};'))
+resource_builds = []
+for path, file_type in [('Resources/Logo', 'folder'), ('Resources/BetterApple.icns', 'image.icns')]:
+    ref = obj(path, f'isa = PBXFileReference; lastKnownFileType = {file_type}; path = {q(path)}; sourceTree = SOURCE_ROOT;')
+    refs.append(ref)
+    resource_builds.append(obj('resource:' + path, f'isa = PBXBuildFile; fileRef = {ref};'))
 product = obj('product', 'isa = PBXFileReference; explicitFileType = wrapper.application; path = BetterApple.app; sourceTree = BUILT_PRODUCTS_DIR;')
 products = obj('products', f'isa = PBXGroup; children = ({product},); name = Products; sourceTree = "<group>";')
 group = obj('main-group', f'isa = PBXGroup; children = ({",".join(refs)},{products},); sourceTree = "<group>";')
@@ -28,7 +33,7 @@ core = obj('core-product', f'isa = XCSwiftPackageProductDependency; package = {p
 core_build = obj('core-build', f'isa = PBXBuildFile; productRef = {core};')
 phase = obj('sources', f'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ({",".join(builds)},); runOnlyForDeploymentPostprocessing = 0;')
 frameworks = obj('frameworks', f'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ({core_build},); runOnlyForDeploymentPostprocessing = 0;')
-resources = obj('resources', 'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
+resources = obj('resources', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({",".join(resource_builds)},); runOnlyForDeploymentPostprocessing = 0;')
 project_configs, target_configs = [], []
 for config in ['Debug', 'Release']:
     release = config == 'Release'

@@ -30,6 +30,21 @@ final class DockManager: ObservableObject {
             refresh()
         }
     }
+    @Published var sources: DockActivitySources? { didSet { refresh() } }
+    @Published var nativeDock: NativeDockService?
+    @Published var note: String {
+        didSet {
+            if note.count > 100000 { note = String(note.prefix(100000)) }
+            defaults.set(note, forKey: "dock.note")
+        }
+    }
+    var onVisibilityChange: (() -> Void)?
+    var activeModules: Set<DockModule> {
+        guard preferences.enabled, destinations.contains(where: { id, entry in
+            entry.panel.isVisible && entry.panel.occlusionState.contains(.visible) && (!preferences.autoHide || hoveringScreens.contains(id))
+        }) else { return [] }
+        return Set(preferences.enabledModules)
+    }
     @Published private(set) var applications: [DockApplication] = []
     @Published private(set) var hoveringScreens: Set<String> = []
     @Published private(set) var errorMessage: String?
@@ -45,6 +60,7 @@ final class DockManager: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        note = String((defaults.string(forKey: "dock.note") ?? "").prefix(100000))
         if let data = defaults.data(forKey: "dock.preferences"), let saved = try? JSONDecoder().decode(DockPreferences.self, from: data).validated() {
             preferences = saved
         } else {
@@ -85,6 +101,23 @@ final class DockManager: ObservableObject {
                 self.hover(window.frame.contains(NSEvent.mouseLocation), screenID: id)
             }
         })
+        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] notification in
+            guard let window = notification.object as? DockPanel else { return }
+            MainActor.assumeIsolated {
+                guard let self, self.destinations.values.contains(where: { $0.panel === window }) else { return }
+                self.onVisibilityChange?()
+            }
+        })
+        for name in [NSText.didChangeNotification, NSText.didEndEditingNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                guard let editor = notification.object as? NSTextView else { return }
+                Task { @MainActor [weak self, weak editor] in
+                    guard let self, let editor, let id = self.destinations.first(where: { $0.value.panel === editor.window })?.key,
+                          let panel = self.destinations[id]?.panel, !panel.frame.contains(NSEvent.mouseLocation) else { return }
+                    self.hover(false, screenID: id)
+                }
+            })
+        }
         reloadApplications()
     }
 
@@ -92,6 +125,32 @@ final class DockManager: ObservableObject {
     func hide() { preferences.enabled = false }
     /// One event-driven refresh for Settings, independent of feature visibility.
     func prepareSettings() { reloadApplications() }
+    func applyPureBlack() {
+        var next = preferences
+        next.theme = .dark; next.material = .solid; next.opacity = 1
+        preferences = next
+    }
+    func applyLayoutPreset(_ presentation: DockPresentation) {
+        var next = preferences
+        next.presentation = presentation
+        next.enabledModules = DockModule.allCases
+        next.moduleOrder = [.music, .apps, .timer, .battery, .note]
+        next.iconSize = 48; next.spacing = presentation == .floating ? 16 : 12
+        next.cornerRadius = 22; next.material = .glass; next.opacity = 0.94
+        preferences = next
+    }
+    func setModule(_ module: DockModule, enabled: Bool) {
+        var next = preferences
+        if enabled && !next.enabledModules.contains(module) { next.enabledModules.append(module) }
+        if !enabled { next.enabledModules.removeAll { $0 == module } }
+        preferences = next
+    }
+    func moveModule(_ module: DockModule, by delta: Int) {
+        var next = preferences
+        guard let index = next.moduleOrder.firstIndex(of: module), next.moduleOrder.indices.contains(index + delta) else { return }
+        next.moduleOrder.swapAt(index, index + delta)
+        preferences = next
+    }
     func applyPreset(_ preset: AppearancePreset) {
         guard preset != .custom else { return }
         var next = preferences
@@ -107,6 +166,7 @@ final class DockManager: ObservableObject {
         preferences = next
     }
     func refresh() {
+        defer { onVisibilityChange?() }
         guard preferences.enabled else { closePanels(); return }
         reloadApplications()
         let screens = preferences.allDisplays ? NSScreen.screens : [NSScreen.screens.first(where: { Self.screenID($0) == preferences.screenID }) ?? NSScreen.main].compactMap { $0 }
@@ -116,16 +176,25 @@ final class DockManager: ObservableObject {
             let id = Self.screenID(screen)
             if destinations[id] == nil {
                 let window = DockPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false, screen: screen)
-                window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = true
+                window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = preferences.presentation == .rail
                 window.level = .floating; window.collectionBehavior = [.canJoinAllSpaces, .stationary]
                 window.hidesOnDeactivate = false; window.isReleasedWhenClosed = false
                 let hosting = NSHostingView(rootView: DockSurface(manager: self, screenID: id))
                 // AppKit owns the reveal strip's explicit size. Retained hidden
                 // icons must not impose their expanded minimum on the panel.
                 hosting.sizingOptions = []
-                window.contentView = hosting
+                let container = NSView(frame: .zero)
+                hosting.autoresizingMask = [.width, .height]
+                container.addSubview(hosting)
+                window.contentView = container
                 destinations[id] = (window, screen)
             } else if let panel = destinations[id]?.panel { destinations[id] = (panel, screen) }
+            destinations[id]?.panel.hasShadow = preferences.presentation == .rail
+            switch preferences.theme {
+            case .dark: destinations[id]?.panel.appearance = NSAppearance(named: .darkAqua)
+            case .light: destinations[id]?.panel.appearance = NSAppearance(named: .aqua)
+            case .system: destinations[id]?.panel.appearance = nil
+            }
         }
         positionWindows(animated: false)
         destinations.values.forEach { if !$0.panel.isVisible { $0.panel.orderFrontRegardless() } }
@@ -161,7 +230,7 @@ final class DockManager: ObservableObject {
     private func positionWindows(animated: Bool) {
         let settings = (try? preferences.validated()) ?? DockPreferences()
         let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let metrics = DockLayoutMetrics(settings, reduceMotion: reduced)
+        let metrics = DockContentMetrics(settings, applicationCount: applications.count, reduceMotion: reduced)
         for (id, destination) in destinations {
             let frame = destination.screen.visibleFrame
             let vertical = settings.position != .bottom
@@ -169,8 +238,8 @@ final class DockManager: ObservableObject {
             let crossLength = vertical ? frame.width : frame.height
             let axisMargin = min(12, axisLength / 4)
             let edgeMargin = min(8, crossLength / 4)
-            let length = min(metrics.length(count: applications.count, vertical: vertical, spacing: settings.spacing), axisLength - axisMargin * 2)
-            let requestedThickness = settings.autoHide && !hoveringScreens.contains(id) ? 10 : metrics.thickness(vertical: vertical)
+            let length = min(metrics.length, axisLength - axisMargin * 2)
+            let requestedThickness = settings.autoHide && !hoveringScreens.contains(id) ? 10 : metrics.thickness
             let thickness = min(requestedThickness, crossLength - edgeMargin * 2)
             let rect: NSRect
             switch settings.position {
@@ -194,16 +263,24 @@ final class DockManager: ObservableObject {
         hoverRevisions[screenID] = revision
         hideWork.removeValue(forKey: screenID)?.cancel()
         if entered {
-            if hoveringScreens.insert(screenID).inserted { positionWindows(animated: true) }
+            if hoveringScreens.insert(screenID).inserted { positionWindows(animated: true); onVisibilityChange?() }
         } else {
             let work = DispatchWorkItem { [weak self] in
                 guard let self, self.hoverRevisions[screenID] == revision else { return }
                 self.hideWork.removeValue(forKey: screenID)
                 guard let destination = self.destinations[screenID], !self.menuTracking,
-                      !destination.panel.isKeyWindow,
+                      (destination.panel.firstResponder as? NSTextView)?.hasMarkedText() != true,
                       destination.panel.childWindows?.contains(where: \.isVisible) != true,
                       !destination.panel.frame.contains(NSEvent.mouseLocation) else { return }
-                if self.hoveringScreens.remove(screenID) != nil { self.positionWindows(animated: true) }
+                if self.hoveringScreens.remove(screenID) != nil {
+                    // Leaving the Dock ends ordinary editing; active IME composition
+                    // and menus remain protected until their own completion events.
+                    if destination.panel.isKeyWindow {
+                        destination.panel.makeFirstResponder(nil)
+                        destination.panel.resignKey()
+                    }
+                    self.positionWindows(animated: true); self.onVisibilityChange?()
+                }
             }
             hideWork[screenID] = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
@@ -230,7 +307,10 @@ final class DockManager: ObservableObject {
         guard picker.runModal() == .OK else { return }
         var paths = preferences.applicationPaths
         for url in picker.urls where !paths.contains(url.path) && paths.count < 100 { paths.append(url.path) }
-        preferences.applicationPaths = paths
+        var next = preferences
+        next.applicationPaths = paths
+        if !next.enabledModules.contains(.apps) { next.enabledModules.append(.apps) }
+        preferences = next
     }
     func pin(_ app: DockApplication) {
         guard preferences.applicationPaths.count < 100, !preferences.applicationPaths.contains(app.id) else { return }

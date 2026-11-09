@@ -9,16 +9,31 @@ enum InteractionValidation {
         app.model.settings.island.visual.animationDuration = 0.24
         app.model.settings.island.autoCloseDelay = 0
         app.model.settings.island.hoverToExpand = false
+        app.dock.applyLayoutPreset(.floating)
+        app.dock.preferences.enabled = true
+        app.dock.preferences.autoHide = true
+        app.widgets.add(kind: .clock)
+        app.widgets.add(kind: .system)
+        for item in app.widgets.widgets {
+            app.widgets.update(item.id) { $0.apply(item.kind == .clock ? .desktopClock : .statusBar) }
+        }
+        app.widgets.arrangeVisible()
+        app.timer.completionSound = .silent
+        app.timer.start(seconds: 120)
         app.island.applySettings()
+        let screen = NSScreen.main ?? NSScreen.screens.first
         for _ in 0..<20 {
+            if let screen { app.dock.hover(true, screenID: DockManager.screenID(screen)) }
             app.island.state.selected = .calculator
             app.island.state.expanded = true
             try await Task.sleep(for: .milliseconds(320))
             app.island.state.selected = .timer
             try await Task.sleep(for: .milliseconds(160))
             app.island.collapse()
+            if let screen { app.dock.hover(false, screenID: DockManager.screenID(screen)) }
             try await Task.sleep(for: .milliseconds(260))
         }
+        app.timer.cancel()
     }
     static func run(_ app: AppCoordinator, directory: URL) async throws -> [String: Bool] {
         var checks: [String: Bool] = [:]
@@ -108,7 +123,7 @@ enum InteractionValidation {
 
         checks["timer draft validates actual text including locale"] = ["", "garbage", "NaN", "0", "-1", "1e99"].allSatisfy { TimerDraftValidation.minutes($0) == nil } && TimerDraftValidation.minutes("1.5", locale: Locale(identifier: "en_US")) == 1.5 && TimerDraftValidation.minutes("1,5", locale: Locale(identifier: "pt_BR")) == 1.5 && TimerDraftValidation.presetMinutes("1.5") == nil
         app.showSettings()
-        try await Task.sleep(for: .milliseconds(40))
+        try await Task.sleep(for: .milliseconds(160))
         let keyBeforeNotice = NSApp.keyWindow
         app.notices.show("Native interaction validation", openSettings: {})
         try await Task.sleep(for: .milliseconds(220))
