@@ -161,19 +161,23 @@ final class MusicService: ObservableObject {
                 switch result {
                 case .failure(let error): self.fail(error)
                 case .success(let descriptor):
-                    self.isConnected = true
-                    self.errorMessage = nil
-                    self.volume = min(1, max(0, Double(descriptor.atIndex(7)?.int32Value ?? 50) / 100))
+                    // Assign only on change: every @Published write invalidates observing views,
+                    // and a paused player otherwise re-rendered them on each 2 s poll.
+                    if !self.isConnected { self.isConnected = true }
+                    if self.errorMessage != nil { self.errorMessage = nil }
+                    let volume = min(1, max(0, Double(descriptor.atIndex(7)?.int32Value ?? 50) / 100))
+                    if self.volume != volume { self.volume = volume }
                     let title = descriptor.atIndex(1)?.stringValue ?? ""
                     if title.isEmpty {
-                        self.track = nil
-                        self.artwork = nil
+                        if self.track != nil { self.track = nil }
+                        if self.artwork != nil { self.artwork = nil }
                         self.artworkIdentity = nil
                         self.artworkTask?.cancel()
                         self.artworkTask = nil
                     }
                     else {
-                        self.track = MusicTrack(title: title, artist: descriptor.atIndex(2)?.stringValue ?? "", album: descriptor.atIndex(3)?.stringValue ?? "", duration: max(0, Self.number(descriptor.atIndex(4))), position: max(0, Self.number(descriptor.atIndex(5))), isPlaying: descriptor.atIndex(6)?.booleanValue ?? false, artworkURL: URL(string: descriptor.atIndex(8)?.stringValue ?? ""))
+                        let track = MusicTrack(title: title, artist: descriptor.atIndex(2)?.stringValue ?? "", album: descriptor.atIndex(3)?.stringValue ?? "", duration: max(0, Self.number(descriptor.atIndex(4))), position: max(0, Self.number(descriptor.atIndex(5))), isPlaying: descriptor.atIndex(6)?.booleanValue ?? false, artworkURL: URL(string: descriptor.atIndex(8)?.stringValue ?? ""))
+                        if self.track != track { self.track = track }
                         if self.visible { self.loadArtwork() }
                     }
                     self.updateTimer()
@@ -260,11 +264,26 @@ final class MusicService: ObservableObject {
         return value.isFinite ? value : 0
     }
 
+    /// Compiled scripts, touched only on `scriptQueue`. Polling reuses the snapshot script
+    /// instead of recompiling it every 2 s.
+    // Bound the cache because seek and volume commands embed changing values.
+    private nonisolated static let compiledScripts = CompiledMusicScripts()
+
     private nonisolated static func execute(_ source: String) -> Result<NSAppleEventDescriptor, Error> {
-        autoreleasepool {
+        dispatchPrecondition(condition: .onQueue(scriptQueue))
+        return autoreleasepool {
             var error: NSDictionary?
-            guard let script = NSAppleScript(source: source) else {
-                return .failure(NSError(domain: "BetterApple.Music", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to create player command."]))
+            let script: NSAppleScript
+            if let cached = compiledScripts.values[source] { script = cached }
+            else {
+                guard let created = NSAppleScript(source: source) else {
+                    return .failure(NSError(domain: "BetterApple.Music", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to create player command."]))
+                }
+                if created.compileAndReturnError(nil) {
+                    if compiledScripts.values.count >= 32 { compiledScripts.values.removeAll() }
+                    compiledScripts.values[source] = created
+                }
+                script = created
             }
             let result = script.executeAndReturnError(&error)
             if let error {
@@ -277,4 +296,9 @@ final class MusicService: ObservableObject {
     }
 
     deinit { timer?.invalidate(); artworkTask?.cancel(); volumeTask?.cancel(); seekTask?.cancel() }
+}
+
+/// Mutable storage is accessed exclusively after execute() verifies the shared queue.
+private final class CompiledMusicScripts: @unchecked Sendable {
+    var values: [String: NSAppleScript] = [:]
 }

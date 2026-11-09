@@ -75,3 +75,9 @@ Desligar Widgets desmonta também painéis em fade e elimina activeKinds; deslig
 ## Silhueta no topo — 0.5
 
 Cap e corpo existem também no monitor sem câmera; há uma janela adicional em comparação ao fallback anterior de faixa única. A mudança usa eventos de hover e animações finitas, sem display link/polling novo. O estado compacto continua sem demanda dos módulos. Não foram refeitas medições de CPU/RAM/FPS; a duplicação por tela precisa entrar no próximo profiling.
+
+## Música — scripts compilados e publicação por mudança
+
+Medição isolada (2026-11-09, mesma máquina, `swiftc -O`, só compilação; execução exige Automation): o script de snapshot do Apple Music custa **~111 ms** na primeira compilação (carga do componente AppleScript) e **~0,9 ms** em cada recompilação seguinte. O polling de 2 s recompilava o script a cada leitura. `MusicService` agora mantém os scripts compilados na fila serial de scripts (limpa ao atingir 32 entradas, pois seek/volume embutem valores) e só escreve `@Published` quando o valor muda; com player pausado ou parado, o poll não invalida mais as views observadoras.
+
+Validação: build Release, `swift test` (26 testes, 0 falhas), harnesses nativos `services` e `widgets`, e verificação de reuso de `NSAppleScript` compilado em 5 execuções. Não houve execução contra Music/Spotify reais nem nova medição de CPU/RSS do app: o ganho no app é estimado pelo microbenchmark, não medido.
