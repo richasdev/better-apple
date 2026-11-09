@@ -53,6 +53,12 @@ final class IslandManager {
                 self.onVisibilityChange?()
             }
         }.store(in: &observations)
+        sources.music.$isConnected.removeDuplicates().dropFirst().sink { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.state.expanded, self.state.selected == .music else { return }
+                self.layout(duration: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : min(WorkspaceMotion.content, self.model.settings.island.visual.animationDuration))
+            }
+        }.store(in: &observations)
         observe(NSApplication.didChangeScreenParametersNotification) { [weak self] _ in self?.rebuild() }
         observe(NSWindow.didChangeOcclusionStateNotification) { [weak self] notification in
             guard let self, let window = notification.object as? IslandPanel,
@@ -306,10 +312,10 @@ final class IslandManager {
         guard settings.dynamicHeightEnabled else { return settings.expandedHeight }
         let preferred: Double
         switch state.selected {
-        case .calculator: preferred = 225
-        case .music: preferred = 300
-        case .calendar: preferred = 330
-        case .timer: preferred = 290
+        case .calculator: preferred = 195
+        case .music: preferred = sources.music.isConnected ? 170 : 150
+        case .calendar: preferred = 260
+        case .timer: preferred = 240
         case .system: preferred = settings.expandedHeight
         }
         return min(settings.expandedHeight, preferred + (state.connectionNotice == nil ? 0 : 70))

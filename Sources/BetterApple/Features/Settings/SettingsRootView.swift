@@ -142,12 +142,17 @@ struct SettingsRootView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Music automation") {
-                    Text("macOS asks for Automation permission separately for each player. Open the player first, then connect.").foregroundStyle(.secondary)
+                    Text("Choose a player to connect. Desktop players open when needed; macOS asks for Automation access separately for each app.").foregroundStyle(.secondary)
                     HStack {
-                        Button("Connect Apple Music") { music.connect(to: .appleMusic) }
-                        Button("Connect Spotify") { music.connect(to: .spotify) }
+                        Menu("Connect player") {
+                            ForEach(music.availablePlayers) { player in
+                                Button(player.title) { music.connect(to: player) }
+                            }
+                        }
                         Button("Disconnect") { music.disconnect() }
                     }
+                    Text("Selected: \(music.selectedPlayer.title)").font(.caption)
+                    if let help = music.connectionHelp { Text(help).font(.caption).foregroundStyle(.secondary) }
                     if let error = music.errorMessage { Text(error).font(.caption).foregroundStyle(.orange) }
                 }
                 Section {

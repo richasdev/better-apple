@@ -48,6 +48,21 @@ final class AppModel: ObservableObject {
         old.island.placementMode != new.island.placementMode || old.island.visual != new.island.visual || old.island.width != new.island.width || old.island.height != new.island.height ||
         old.island.expandedWidth != new.island.expandedWidth || old.island.expandedHeight != new.island.expandedHeight || old.island.minimal != new.island.minimal
     }
+    func compactIslandIfNeeded(defaults: UserDefaults) {
+        let key = "island.compactExpansion.v1"
+        guard !defaults.bool(forKey: key) else { return }
+        if let existing = defaults.data(forKey: "BetterApple.settings.v1") {
+            do { _ = try store.importSettings(existing) }
+            catch { persistenceError = "Compact setup kept the existing configuration unchanged: \(error.localizedDescription)"; return }
+        }
+        // The requested compact update also applies to the user's previously large panel.
+        // Apply once; later manual size choices remain untouched.
+        var updated = settings
+        updated.island.expandedWidth = min(updated.island.expandedWidth, 360)
+        updated.island.expandedHeight = min(updated.island.expandedHeight, 260)
+        replaceSettings(updated)
+        if persistenceError == nil { defaults.set(true, forKey: key) }
+    }
     func exportSettings() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]

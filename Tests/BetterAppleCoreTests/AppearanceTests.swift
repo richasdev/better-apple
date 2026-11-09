@@ -39,5 +39,11 @@ final class AppearanceTests: XCTestCase {
         XCTAssertEqual(settings.island.modules, [.timer, .calculator])
         XCTAssertEqual(settings.island.defaultModule, .timer)
         XCTAssertEqual(settings.island.offsetX, 84)
+        let defaultSize = settings.island
+        for preset in [AppearancePreset.minimal, .compact] {
+            settings.applyPreset(preset)
+            XCTAssertLessThan(settings.island.expandedWidth, defaultSize.expandedWidth)
+            XCTAssertLessThan(settings.island.expandedHeight, defaultSize.expandedHeight)
+        }
     }
 }

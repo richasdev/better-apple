@@ -28,7 +28,7 @@ enum RuntimeValidation {
             app.island.state.expanded = true
             try await Task.sleep(for: .milliseconds(500))
             checks["island window expanded"] = app.island.state.expanded && NSApp.windows.contains {
-                $0 is IslandPanel && $0.isVisible && $0.frame.width >= 419 && $0.frame.height >= 249
+                $0 is IslandPanel && $0.isVisible && abs($0.frame.width - app.model.settings.island.expandedWidth) < 1 && abs($0.frame.height - app.model.settings.island.expandedHeight) < 1
             }
             let islandWindows = Set(NSApp.windows.filter { $0 is IslandPanel && $0.isVisible }.map(\.windowNumber))
             app.calculator.expression = "6 * 7"

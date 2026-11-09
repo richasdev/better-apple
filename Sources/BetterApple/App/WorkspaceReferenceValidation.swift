@@ -8,6 +8,18 @@ enum WorkspaceReferenceValidation {
         let original = try app.configurationData()
         defer { try? app.applyConfigurationData(original); app.timer.cancel() }
         var checks: [String: Bool] = [:]
+        let migrationSuite = "app.betterapple.compact-migration." + UUID().uuidString
+        let migrationDefaults = UserDefaults(suiteName: migrationSuite)!
+        defer { migrationDefaults.removePersistentDomain(forName: migrationSuite) }
+        let compactModel = AppModel(defaults: migrationDefaults)
+        compactModel.settings.island.expandedWidth = 503
+        compactModel.settings.island.expandedHeight = 489
+        compactModel.settings.island.enabled = false
+        compactModel.compactIslandIfNeeded(defaults: migrationDefaults)
+        checks["compact migration reduces legacy geometry without enabling feature"] = compactModel.settings.island.expandedWidth == 360 && compactModel.settings.island.expandedHeight == 260 && !compactModel.settings.island.enabled
+        compactModel.settings.island.expandedWidth = 390
+        compactModel.compactIslandIfNeeded(defaults: migrationDefaults)
+        checks["compact migration preserves subsequent size choice"] = compactModel.settings.island.expandedWidth == 390
         checks["adaptive logo variants and macOS app icon are bundled"] = BrandAsset.image(darkMode: true) != nil && BrandAsset.image(darkMode: false) != nil && Bundle.main.url(forResource: "BetterApple", withExtension: "icns") != nil
         let apps = app.dock.preferences.applicationPaths
         app.dock.preferences.enabled = false

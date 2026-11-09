@@ -31,8 +31,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var enabled = true
     public var width = 220.0
     public var height = 34.0
-    public var expandedWidth = 420.0
-    public var expandedHeight = 320.0
+    public var expandedWidth = 360.0
+    public var expandedHeight = 260.0
     public var offsetX = 0.0
     public var offsetY = 6.0
     public var hoverToExpand = true
@@ -127,24 +127,24 @@ public struct AppSettings: Codable, Equatable, Sendable {
         appearance = preset
         guard preset != .custom else { return }
         island.width = 220; island.height = 34
-        island.expandedWidth = 420; island.expandedHeight = 320
+        island.expandedWidth = 360; island.expandedHeight = 260
         island.minimal = false; island.visual = IslandAppearance()
         dock.iconSize = 48; dock.spacing = 10; dock.opacity = 0.85
         switch preset {
         case .default: break
         case .minimal:
             island.width = 160; island.height = 28; island.minimal = true
-            island.expandedWidth = 360; island.expandedHeight = 300
+            island.expandedWidth = 340; island.expandedHeight = 240
             island.visual.cornerRadius = 16; island.visual.borderVisible = false
             island.visual.shadowVisible = false; island.visual.animationDuration = 0.16
             dock.iconSize = 36; dock.spacing = 6
         case .glass:
             island.visual.material = .glass; island.visual.theme = .system
             island.visual.opacity = 0.85; island.visual.cornerRadius = 22
-            island.expandedWidth = 440; island.expandedHeight = 340; dock.opacity = 0.65
+            island.expandedWidth = 380; island.expandedHeight = 280; dock.opacity = 0.65
         case .compact:
             island.width = 190; island.height = 30
-            island.expandedWidth = 380; island.expandedHeight = 300
+            island.expandedWidth = 340; island.expandedHeight = 220
             island.visual.cornerRadius = 20; island.visual.animationDuration = 0.18
             dock.iconSize = 36; dock.spacing = 6
         case .custom: break

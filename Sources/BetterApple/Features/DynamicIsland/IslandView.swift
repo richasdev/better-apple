@@ -41,7 +41,7 @@ struct IslandView: View {
             if state.expanded || state.expandedContentVisible {
                 if state.connectionNoticeCompact, let notice = state.connectionNotice {
                     IslandConnectionBanner(notice: notice)
-                        .padding(18)
+                        .padding(12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .opacity(state.expandedContentVisible ? 1 : 0)
                         .contentShape(Rectangle()).onTapGesture(perform: open)
@@ -52,24 +52,14 @@ struct IslandView: View {
                 if let notice = state.connectionNotice {
                     IslandConnectionBanner(notice: notice).padding(.bottom, 12)
                 }
-                HStack {
-                    Label(state.selected.title, systemImage: "circle.lefthalf.filled").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Spacer()
-                    Button(action: pin) { Image(systemName: state.pinned ? "pin.fill" : "pin") }
-                        .foregroundStyle(state.pinned ? appearance.accent.color : .secondary)
-                        .help(state.pinned ? "Unpin Island" : "Keep Island open")
-                        .accessibilityLabel(state.pinned ? "Unpin Island" : "Keep Island open")
-                        .accessibilityAddTraits(state.pinned ? .isSelected : [])
-                    Button(action: toggle) { Image(systemName: "chevron.up") }.help("Collapse Island").accessibilityLabel("Collapse Island")
-                }.buttonStyle(SurfaceButtonStyle(accent: appearance.accent.color)).padding(.bottom, 10)
                 HStack(spacing: 6) {
                     ForEach(model.settings.island.modules) { module in
                         Button { select(module) } label: {
-                            VStack(spacing: 5) {
-                                Image(systemName: module.symbol).font(.system(size: 15, weight: .medium))
+                            VStack(spacing: 3) {
+                                Image(systemName: module.symbol).font(.system(size: 13, weight: .medium))
                                 if appearance.showModuleLabels { Text(module.title).font(.system(size: 10, weight: .medium)).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8) }
                             }
-                            .frame(maxWidth: .infinity).frame(height: appearance.showModuleLabels ? 44 : 32)
+                            .frame(maxWidth: .infinity).frame(height: appearance.showModuleLabels ? 35 : 28)
                             .background {
                                 if state.selected == module {
                                     RoundedRectangle(cornerRadius: 9).fill(appearance.accent.color.opacity(0.17))
@@ -80,7 +70,16 @@ struct IslandView: View {
                         }.buttonStyle(SurfaceButtonStyle(accent: appearance.accent.color)).help(module.title).accessibilityLabel(module.title)
                             .accessibilityAddTraits(state.selected == module ? .isSelected : [])
                     }
-                }.padding(.bottom, 12)
+                    Button(action: pin) { Image(systemName: state.pinned ? "pin.fill" : "pin") }
+                        .foregroundStyle(state.pinned ? appearance.accent.color : .secondary)
+                        .buttonStyle(SurfaceButtonStyle(accent: appearance.accent.color))
+                        .help(state.pinned ? "Unpin Island" : "Keep Island open")
+                        .accessibilityLabel(state.pinned ? "Unpin Island" : "Keep Island open")
+                        .accessibilityAddTraits(state.pinned ? .isSelected : [])
+                    Button(action: toggle) { Image(systemName: "chevron.up") }
+                        .buttonStyle(SurfaceButtonStyle(accent: appearance.accent.color))
+                        .foregroundStyle(.secondary).help("Collapse Island").accessibilityLabel("Collapse Island")
+                }.padding(.bottom, 7)
                     .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: WorkspaceMotion.content), value: state.selected)
                 registry.content(for: state.selected)
                     .environment(\.islandFocusRequest, keyboardActive() ? state.focusRequest : 0)
@@ -89,7 +88,7 @@ struct IslandView: View {
                     .transition(WorkspaceMotion.transition(reduceMotion: motionDisabled))
                     .animation(WorkspaceMotion.animation(reduceMotion: motionDisabled, duration: WorkspaceMotion.content), value: state.selected)
                 }
-                .padding(18)
+                .padding(12)
                 .transition(WorkspaceMotion.transition(reduceMotion: motionDisabled))
                 .opacity(state.expandedContentVisible ? 1 : 0)
                 .offset(y: state.expandedContentVisible || motionDisabled ? 0 : 4)

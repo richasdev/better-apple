@@ -7,7 +7,7 @@ import BetterAppleCore
 final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation, ObservableObject {
     let model: AppModel
     let calendar = CalendarService()
-    let music = MusicService()
+    let music: MusicService
     let system = SystemStatusService()
     let bluetooth = BluetoothConnectionService()
     let nativeDock: NativeDockService
@@ -35,6 +35,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         self.defaults = defaults
         self.bluetoothMonitoringAllowed = bluetoothMonitoringAllowed
         self.nativeDockChangesAllowed = nativeDockChangesAllowed
+        music = MusicService(defaults: defaults)
         nativeDock = NativeDockService(defaults: defaults)
         model = AppModel(defaults: defaults)
         timer = TimerService(defaults: defaults)
@@ -56,6 +57,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
             }
         }
         model.enableCameraExperienceIfNeeded(defaults: defaults)
+        model.compactIslandIfNeeded(defaults: defaults)
         dock.sources = DockActivitySources(music: music, system: system, timer: timer)
         dock.nativeDock = nativeDock
         nativeDock.onActivate = { [weak self] in

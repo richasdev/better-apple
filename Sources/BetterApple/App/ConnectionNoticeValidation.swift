@@ -6,7 +6,7 @@ import BetterAppleCore
 enum ConnectionNoticeValidation {
     static func run(_ app: AppCoordinator, directory: URL) async throws -> [String: Bool] {
         let original = try app.configurationData()
-        defer { app.island.collapse(); try? app.applyConfigurationData(original) }
+        defer { app.music.disconnect(); app.island.collapse(); try? app.applyConfigurationData(original) }
         var checks: [String: Bool] = [:]
         checks["Bluetooth validation never starts hardware monitoring"] = !app.bluetooth.isRunning
         app.model.settings.island.enabled = true
@@ -14,6 +14,7 @@ enum ConnectionNoticeValidation {
         app.model.settings.island.placementMode = .camera
         app.model.settings.island.defaultModule = .calculator
         app.model.settings.island.dynamicHeightEnabled = true
+        app.model.settings.island.expandedWidth = 360
         app.model.settings.island.autoCloseDelay = 0.08
         app.model.settings.island.visual.animationDuration = 0.18
         app.island.collapse(); app.island.applySettings()
@@ -27,7 +28,7 @@ enum ConnectionNoticeValidation {
         app.island.open()
         try await Task.sleep(for: .milliseconds(260))
         checks["clicking connection notice opens normal tools"] = app.island.state.connectionNotice == nil && !app.island.state.connectionNoticeCompact && app.island.state.expanded && body.isKeyboardTarget
-        checks["calculator fits its active content instead of leaving a tall empty panel"] = abs(body.frame.height - min(225, app.model.settings.island.expandedHeight)) < 1
+        checks["calculator fits its active content instead of leaving a tall empty panel"] = abs(body.frame.height - min(195, app.model.settings.island.expandedHeight)) < 1
         checks["black Island uses native dark appearance"] = body.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         func editor(in view: NSView) -> NSTextField? {
             if let field = view as? NSTextField, field.isEditable { return field }
@@ -47,7 +48,7 @@ enum ConnectionNoticeValidation {
         }
         app.island.presentConnection(name: "Headphones · validation", symbol: "headphones", connected: false)
         try await Task.sleep(for: .milliseconds(260))
-        checks["connection while editing keeps full tools and calculator content"] = !app.island.state.connectionNoticeCompact && app.calculator.expression == "12 + 3" && body.contentView.flatMap(editor) === field && abs(body.frame.height - min(295, app.model.settings.island.expandedHeight)) < 1
+        checks["connection while editing keeps full tools and calculator content"] = !app.island.state.connectionNoticeCompact && app.calculator.expression == "12 + 3" && body.contentView.flatMap(editor) === field && abs(body.frame.height - min(265, app.model.settings.island.expandedHeight)) < 1
         app.island.open() // dismisses the inline event, retaining normal tools
         try await Task.sleep(for: .milliseconds(220))
         if let editor = body.firstResponder as? NSTextView, editor.isFieldEditor {
@@ -81,9 +82,39 @@ enum ConnectionNoticeValidation {
         app.island.applySettings()
         app.island.presentConnection(name: "Ignored validation", symbol: "headphones", connected: true)
         checks["disabled Bluetooth notices never open the Island"] = app.island.state.connectionNotice == nil && !app.island.state.expanded
+        app.model.settings.island.autoCloseDelay = 0
+        app.model.settings.island.expandedWidth = 360
+        app.island.state.selected = .music
+        app.island.open()
+        try await Task.sleep(for: .milliseconds(280))
+        checks["disconnected music opens at compact content height"] = abs(body.frame.height - 150) < 1 && abs(body.frame.width - 360) < 1 && !app.music.isConnected
+        if let view = body.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("compact-island-music.png"))
+        }
+        app.model.settings.island.expandedWidth = 300
+        app.island.applySettings()
+        try await Task.sleep(for: .milliseconds(280))
+        checks["compact music preserves minimum configured width"] = abs(body.frame.width - 300) < 1 && abs(body.frame.height - 150) < 1
+        // A local script-only fixture exercises actual connected controls without
+        // authorizing a player or touching anyone's playback. Never registered in Release.
+        app.music.connect(to: CompactMusicLayoutFixture())
+        try await Task.sleep(for: .milliseconds(350))
+        checks["connected music fits compact layout at minimum width"] = app.music.isConnected && app.music.track?.title == "Compact layout validation" && abs(body.frame.width - 300) < 1 && abs(body.frame.height - 170) < 1
+        if let view = body.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("compact-music-controls.png"))
+        }
         try JSONSerialization.data(withJSONObject: ["checks": checks, "hardwareBluetoothTested": false], options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("connection-notice.json"))
         return checks
     }
+}
+
+private struct CompactMusicLayoutFixture: MusicPlayerAdapter {
+    let id = "compact-layout-validation"
+    let title = "Layout test"
+    var bundleIdentifier: String { Bundle.main.bundleIdentifier ?? "app.betterapple.desktop" }
+    let snapshotScript = "return {\"Compact layout validation\", \"Test fixture\", \"\", 180, 42, false, 50, \"\"}"
 }
 #endif
