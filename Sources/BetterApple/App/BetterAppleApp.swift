@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--validate") {
             let defaults = UserDefaults(suiteName: "app.betterapple.validation")!
             defaults.removePersistentDomain(forName: "app.betterapple.validation")
-            coordinator = AppCoordinator(defaults: defaults, bluetoothMonitoringAllowed: false, nativeDockChangesAllowed: false)
+            coordinator = AppCoordinator(defaults: defaults, bluetoothMonitoringAllowed: false, nativeDockChangesAllowed: false, systemEventsAllowed: false)
             coordinator?.start()
             if let coordinator { Task { await RuntimeValidation.run(coordinator) } }
             return

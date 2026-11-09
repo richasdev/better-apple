@@ -22,7 +22,7 @@ enum ConnectionNoticeValidation {
         app.island.presentConnection(name: "AirPods Pro · validation", symbol: "airpodspro", connected: true)
         try await Task.sleep(for: .milliseconds(300))
         guard let body = NSApp.windows.compactMap({ $0 as? IslandPanel }).first(where: \.isVisible) else { throw CocoaError(.coderInvalidValue) }
-        checks["connection event opens a compact notice without keyboard activation"] = app.island.state.expanded && app.island.state.connectionNoticeCompact && app.island.state.connectionNotice?.connected == true && app.island.state.focusRequest == 0 && !body.isKeyboardTarget && abs(body.frame.height - 92) < 1
+        checks["connection event opens a compact notice without keyboard activation"] = app.island.state.expanded && app.island.state.connectionNoticeCompact && app.island.state.connectionNotice?.connected == true && app.island.state.focusRequest == 0 && !body.isKeyboardTarget && abs(body.frame.height - 60) < 1
         checks["connection-only notice does not activate a module service"] = app.island.activeModule == nil
         app.calculator.expression = "12 + 3"
         app.island.open()

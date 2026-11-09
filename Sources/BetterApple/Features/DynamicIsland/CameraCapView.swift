@@ -29,17 +29,61 @@ struct NotchCapShape: Shape {
 
 struct CameraCapView: View {
     @ObservedObject var state: IslandState
+    let cameraWidth: CGFloat
     let hover: (Bool) -> Void
     let expand: () -> Void
+
+    init(state: IslandState, cameraWidth: CGFloat = 185,
+         hover: @escaping (Bool) -> Void, expand: @escaping () -> Void) {
+        self.state = state
+        self.cameraWidth = cameraWidth
+        self.hover = hover
+        self.expand = expand
+    }
+
+    private var showsPlayback: Bool { !state.expanded && state.compactMusicTitle != nil }
+
     var body: some View {
         Button(action: expand) {
-            NotchCapShape(bottomRadius: state.expanded ? 0 : 10)
-                .fill(Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1))
+            GeometryReader { geometry in
+                ZStack {
+                    NotchCapShape(bottomRadius: state.expanded ? 0 : 10)
+                        .fill(Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1))
+                    if showsPlayback {
+                        let artworkSize = min(24, max(0, geometry.size.height - 8))
+                        HStack(spacing: 0) {
+                            Group {
+                                if let artwork = state.compactArtwork {
+                                    Image(nsImage: artwork).resizable().scaledToFill()
+                                } else {
+                                    Image(systemName: "music.note")
+                                        .font(.system(size: min(13, artworkSize * 0.6), weight: .medium))
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .foregroundStyle(.white.opacity(0.85))
+                                        .background(.white.opacity(0.09))
+                                }
+                            }
+                            .frame(width: artworkSize, height: artworkSize)
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .frame(width: 44)
+                            // This gap is the actual physical cutout width on MacBooks.
+                            Color.clear.frame(width: max(0, cameraWidth))
+                            Image(systemName: state.compactMusicPlaying ? "waveform" : "pause.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(state.compactMusicPlaying ? Color.green.opacity(0.9) : Color.white.opacity(0.65))
+                                .frame(width: 44)
+                        }
+                        .accessibilityHidden(true)
+                    }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(NotchCapShape(bottomRadius: state.expanded ? 0 : 10))
+            }
         }
         .buttonStyle(.plain).focusable(false)
         .accessibilityLabel("Open Dynamic Island notch")
+        .accessibilityValue(showsPlayback ? "\(state.compactMusicTitle ?? "") · \(state.compactMusicPlaying ? "Playing" : "Paused")" : "")
+        .help(showsPlayback ? state.compactMusicTitle ?? "Open Dynamic Island" : "Open Dynamic Island")
         .onHover(perform: hover)
     }
 }

@@ -22,6 +22,7 @@ struct IslandView: View {
     let open: () -> Void
     let close: () -> Void
     let select: (ModuleID) -> Void
+    let overview: () -> Void
     let keyboardActive: () -> Bool
     @Namespace private var selectionAnimation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -47,12 +48,27 @@ struct IslandView: View {
                         .contentShape(Rectangle()).onTapGesture(perform: open)
                         .accessibilityAddTraits(.isButton)
                         .accessibilityHint("Open Dynamic Island tools")
+                } else if state.overview {
+                    VStack(spacing: 0) {
+                    if let notice = state.connectionNotice { IslandConnectionBanner(notice: notice).padding(.horizontal, 14).padding(.top, 8) }
+                    IslandDashboardView(sources: sources, modules: model.settings.island.modules,
+                        openModule: select, close: close, pinned: state.pinned, pin: pin)
+                    }
+                        .opacity(state.expandedContentVisible ? 1 : 0)
+                        .allowsHitTesting(state.expandedContentVisible)
+                        .accessibilityHidden(!state.expandedContentVisible)
+                        .transition(WorkspaceMotion.transition(reduceMotion: motionDisabled))
                 } else {
                 VStack(spacing: 0) {
                 if let notice = state.connectionNotice {
                     IslandConnectionBanner(notice: notice).padding(.bottom, 12)
                 }
                 HStack(spacing: 6) {
+                    if model.settings.island.overviewOnHoverEnabled {
+                        Button(action: overview) { Image(systemName: "chevron.left") }
+                            .buttonStyle(SurfaceButtonStyle(accent: appearance.accent.color))
+                            .help("Back to overview").accessibilityLabel("Back to overview")
+                    }
                     ForEach(model.settings.island.modules) { module in
                         Button { select(module) } label: {
                             VStack(spacing: 3) {
@@ -200,15 +216,20 @@ private struct IslandConnectionBanner: View {
     let notice: IslandConnectionNotice
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: notice.symbol).font(.system(size: 34, weight: .medium))
-                .foregroundStyle(.white).frame(width: 50).accessibilityHidden(true)
+            Image(systemName: notice.symbol).font(.system(size: 25, weight: .medium))
+                .foregroundStyle(.white).frame(width: 34).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(notice.name).font(.system(size: 17, weight: .semibold)).lineLimit(1).foregroundStyle(.white)
-                Label(notice.connected ? "Connected" : "Disconnected", systemImage: notice.connected ? "checkmark.circle.fill" : "xmark.circle")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(notice.connected ? Color.green : Color.white.opacity(0.7))
+                Text(notice.name).font(.system(size: 13, weight: .semibold)).lineLimit(1).foregroundStyle(.white)
+                Text(notice.detail ?? (notice.connected ? "Connected" : "Disconnected"))
+                    .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
+            if let percentage = notice.percentage {
+                Text("\(percentage)%").font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundStyle(.red)
+            } else {
+                Image(systemName: notice.connected ? "checkmark.circle" : "xmark.circle")
+                    .foregroundStyle(notice.connected ? Color.green : Color.secondary).font(.system(size: 22))
+            }
         }.accessibilityElement(children: .combine)
     }
 }

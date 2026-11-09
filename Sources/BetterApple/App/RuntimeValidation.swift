@@ -17,6 +17,7 @@ enum RuntimeValidation {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("error.txt"))
             try await Task.sleep(for: .milliseconds(500))
             app.model.settings.island.dynamicHeightEnabled = false
+            app.model.settings.island.overviewOnHoverEnabled = false
             app.model.settings.island.placementMode = .floating
             app.island.applySettings()
             checks["settings window presented"] = NSApp.windows.contains { $0.title == "BetterApple" && $0.isVisible }
@@ -109,6 +110,7 @@ enum RuntimeValidation {
             checks.merge(try await FeatureToggleValidation.run(app, directory: directory)) { _, new in new }
             checks.merge(try await WorkspaceReferenceValidation.run(app, directory: directory)) { _, new in new }
             checks.merge(try await ConnectionNoticeValidation.run(app, directory: directory)) { _, new in new }
+            checks.merge(try await NotchOverviewValidation.run(app, directory: directory)) { _, new in new }
         } catch { failure = error.localizedDescription }
         let passed = failure == nil && !checks.isEmpty && checks.values.allSatisfy { $0 }
         var result: [String: Any] = ["checks": checks, "passed": passed, "windowCount": NSApp.windows.count]

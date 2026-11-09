@@ -73,6 +73,9 @@ struct IslandSettingsView: View {
             Section("Behavior") {
                 Toggle("Enable Dynamic Island", isOn: $model.settings.island.enabled)
                 Toggle("Expand on hover", isOn: $model.settings.island.hoverToExpand)
+                Toggle("Open horizontal overview first", isOn: $model.settings.island.overviewOnHoverEnabled)
+                Text("Music and calendar open together. Detailed tools remain in the Tools menu. Your detailed panel size is preserved.").font(.caption).foregroundStyle(.secondary)
+                Toggle("Audio output and low battery notices", isOn: $model.settings.island.systemNoticesEnabled)
                 Toggle("Bluetooth connection notices", isOn: $model.settings.island.connectionNotificationsEnabled)
                 Text("Opt in to briefly show connected and disconnected devices, including AirPods, without scanning or pairing. macOS may request Bluetooth access. AirPods battery and BLE-only devices are not available through this passive connection API.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -82,7 +85,7 @@ struct IslandSettingsView: View {
                     Text("Live compact status keeps the selected service active while visible. Turn it off for the lowest idle activity.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Text("The hidden camera edge does not request module data. Music, calendar and system data update when expanded and visible.")
+                    Text("The camera edge shows artwork and playback status while an authorized player is connected. The horizontal overview updates enabled music and calendar modules only while visible.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 slider("Close delay · 0 keeps open", value: $model.settings.island.autoCloseDelay, range: 0...10, format: .seconds)

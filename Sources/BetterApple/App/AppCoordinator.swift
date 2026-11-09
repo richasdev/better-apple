@@ -10,6 +10,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     let music: MusicService
     let system = SystemStatusService()
     let bluetooth = BluetoothConnectionService()
+    let systemEvents = SystemEventNoticeService()
     let nativeDock: NativeDockService
     let timer: TimerService
     let calculator: CalculatorService
@@ -20,6 +21,7 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     private let defaults: UserDefaults
     private let bluetoothMonitoringAllowed: Bool
     private let nativeDockChangesAllowed: Bool
+    private let systemEventsAllowed: Bool
     lazy var widgets = WidgetManager(calendar: calendar, music: music, system: system, timer: timer, calculator: calculator, defaults: defaults)
     lazy var island = IslandManager(model: model, registry: registry, sources: IslandActivitySources(timer: timer, music: music, system: system, calendar: calendar, calculator: calculator))
     private var statusItem: NSStatusItem?
@@ -31,10 +33,11 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
     private var applyingPreferences = false
     private var appearanceObservation: NSKeyValueObservation?
 
-    init(defaults: UserDefaults = .standard, bluetoothMonitoringAllowed: Bool = true, nativeDockChangesAllowed: Bool = true) {
+    init(defaults: UserDefaults = .standard, bluetoothMonitoringAllowed: Bool = true, nativeDockChangesAllowed: Bool = true, systemEventsAllowed: Bool = true) {
         self.defaults = defaults
         self.bluetoothMonitoringAllowed = bluetoothMonitoringAllowed
         self.nativeDockChangesAllowed = nativeDockChangesAllowed
+        self.systemEventsAllowed = systemEventsAllowed
         music = MusicService(defaults: defaults)
         nativeDock = NativeDockService(defaults: defaults)
         model = AppModel(defaults: defaults)
@@ -68,6 +71,10 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         dock.onVisibilityChange = { [weak self] in self?.updateServiceDemand() }
         bluetooth.onEvent = { [weak self] event in
             self?.island.presentConnection(name: event.name, symbol: event.symbol, connected: event.connected)
+        }
+        systemEvents.onNotice = { [weak self] notice in
+            self?.island.presentConnection(name: notice.name, symbol: notice.symbol, connected: true,
+                detail: notice.kind == .lowBattery ? "Mac battery" : notice.detail, percentage: notice.percentage, systemEvent: true)
         }
         shortcuts.onTrigger = { [weak self] in self?.island.toggle() }
         registry.register(NativeIslandModule(id: .calculator) { [calculator] in AnyView(CalculatorModuleView(calculator: calculator)) })
@@ -164,20 +171,25 @@ final class AppCoordinator: NSObject, NSWindowDelegate, NSMenuDelegate, NSMenuIt
         window.contentView = nil; settingsWindow = nil
     }
     private func updateServiceDemand() {
+        if systemEventsAllowed && !sleeping && model.settings.island.enabled && model.settings.island.systemNoticesEnabled {
+            systemEvents.start()
+        } else { systemEvents.stop() }
         if bluetoothMonitoringAllowed && !sleeping && model.settings.island.enabled && model.settings.island.connectionNotificationsEnabled {
             bluetooth.start()
         } else { bluetooth.stop() }
         let active = sleeping ? nil : (island.activeModule ?? island.compactModule)
+        let overview = sleeping ? Set<ModuleID>() : island.overviewModules
         let kinds = sleeping ? Set<DesktopWidgetKind>() : widgets.activeKinds
         let dockModules = sleeping ? Set<DockModule>() : dock.activeModules
-        if active == .calendar || kinds.contains(.events) { calendar.start() } else { calendar.stop() }
-        if active == .music || kinds.contains(.music) || dockModules.contains(.music) { music.start() } else { music.stop() }
+        if active == .calendar || overview.contains(.calendar) || kinds.contains(.events) { calendar.start() } else { calendar.stop() }
+        if active == .music || overview.contains(.music) || (!sleeping && island.compactMusicVisible) || kinds.contains(.music) || dockModules.contains(.music) { music.start() } else { music.stop() }
         if active == .system || kinds.contains(.system) || kinds.contains(.battery) || dockModules.contains(.battery) { system.start() } else { system.stop() }
         timer.setVisible(active == .timer || kinds.contains(.timer) || dockModules.contains(.timer))
     }
     func stop() {
         appearanceObservation = nil
         bluetooth.stop()
+        systemEvents.stop()
         notices.dismiss(animated: false)
         shortcuts.stop()
         widgets.flushPersistence()
