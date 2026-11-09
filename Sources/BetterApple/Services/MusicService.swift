@@ -35,7 +35,7 @@ final class MusicService: ObservableObject {
     @Published private(set) var volume: Double = 0.5
     @Published private(set) var errorMessage: String?
     @Published private(set) var isConnected = false
-    private nonisolated static let scriptQueue = DispatchQueue(label: "app.betterapple.music", qos: .utility)
+    private nonisolated static let scriptQueue = AppleScriptExecution.queue
     private let queue = MusicService.scriptQueue
     private var timer: Timer?
     private var visible = false

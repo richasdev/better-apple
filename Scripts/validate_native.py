@@ -8,7 +8,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets", "dock-motion", "widget-motion", "notch-shape"], default="all")
+parser.add_argument("--only", choices=["all", "services", "productivity", "dock", "widgets", "dock-motion", "widget-motion", "notch-shape", "bluetooth", "native-dock"], default="all")
 selection = parser.parse_args().only
 architecture = platform.machine()
 if architecture not in {"arm64", "x86_64"}:
@@ -25,6 +25,10 @@ def run(arguments):
 with tempfile.TemporaryDirectory(prefix="betterapple-native-check-") as temporary:
     directory = Path(temporary)
     compiler = ["xcrun", "swiftc", "-swift-version", "5", "-target", f"{architecture}-apple-macosx14.0"]
+    platform_path = Path(subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-platform-path"], text=True).strip())
+    plugins = platform_path / "Developer/usr/lib/swift/host/plugins"
+    if plugins.is_dir():
+        compiler += ["-plugin-path", plugins]
     run(compiler + ["-emit-library", "-emit-module", "-module-name", "BetterAppleCore"] +
         sorted((root / "Sources/BetterAppleCore").glob("*.swift")) +
         ["-emit-module-path", directory / "BetterAppleCore.swiftmodule", "-o", directory / "libBetterAppleCore.dylib"])
@@ -36,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="betterapple-native-check-") as temporar
     checks = {
         "services": (services, "service-smoke.swift"),
         "productivity": (services, "productivity-smoke.swift"),
-        "dock": (shared + sorted((root / "Sources/BetterApple/Features/Dock").glob("*.swift")), "dock-smoke.swift"),
+        "dock": (services + shared + sorted((root / "Sources/BetterApple/Features/Dock").glob("*.swift")), "dock-smoke.swift"),
         "widgets": (services + shared + modules +
                     sorted((root / "Sources/BetterApple/Features/Widgets").glob("*.swift")), "widget-smoke.swift"),
     }
@@ -44,6 +48,8 @@ with tempfile.TemporaryDirectory(prefix="betterapple-native-check-") as temporar
     checks["widget-motion"] = (checks["widgets"][0], "widget-motion-smoke.swift")
     checks["notch-shape"] = ([root / "Sources/BetterApple/Features/DynamicIsland/IslandState.swift",
                               root / "Sources/BetterApple/Features/DynamicIsland/CameraCapView.swift"], "notch-shape-smoke.swift")
+    checks["bluetooth"] = ([root / "Sources/BetterApple/Services/BluetoothConnectionService.swift"], "bluetooth-smoke.swift")
+    checks["native-dock"] = ([root / "Sources/BetterApple/Services/AppleScriptExecution.swift", root / "Sources/BetterApple/Services/NativeDockService.swift"], "native-dock-smoke.swift")
     for name, (sources, script) in checks.items():
         if selection not in {"all", name}:
             continue
